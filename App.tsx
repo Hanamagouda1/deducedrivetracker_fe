@@ -22,7 +22,9 @@ const App = () => {
         initialRouteName="Login"
         screenOptions={{
           headerShown: false,
-          animation: 'flip', 
+          animation: 'slide_from_right',
+          animationTypeForReplace: 'pop', 
+          presentation: 'modal', 
         }}
       >
         <Stack.Screen name="Login" component={LoginScreen} />

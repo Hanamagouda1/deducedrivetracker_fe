@@ -20,6 +20,8 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../App';
 import GlassCard from './SharedGlassCard';
+import axios from 'axios';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 type LoginScreenNavigationProp = NativeStackNavigationProp<
   RootStackParamList,
@@ -60,36 +62,87 @@ const LoginScreen = () => {
     ]).start();
   };
 
-  const handleLogin = async () => {
-    const empIdPattern = /^DT-\d{5}$/;
 
-    if (!empIdPattern.test(employeeId)) {
+const handleLogin = async () => {
+   // 🔹 Validate all required fields
+  if (!employeeId || !password) {
       setModalType('error');
-      setModalMessage('⚠️ Employee ID must be in the format DT-XXXXX');
+      setModalMessage('⚠️ All fields are required!');
       setModalVisible(true);
       return;
+  }
+
+  const empIdPattern = /^DT-\d{5}$/;
+
+  if (!empIdPattern.test(employeeId)) {
+    setModalType("error");
+    setModalMessage("⚠️ Employee ID must be in the format DT-XXXXX");
+    setModalVisible(true);
+    return;
+  }
+
+  setLoading(true);
+  animatePress();
+
+  try {
+    const response = await axios.post("https://deduce-drive-tracker-be.onrender.com/auth/login", {
+      employee_id: employeeId,
+      password,
+    });
+
+    // ------- SUCCESS CASE -------
+    if (response.data.access_token) {
+      // Store token
+      await AsyncStorage.setItem("accessToken", response.data.access_token);
+
+      // Store user info (only if backend returns it)
+      if (response.data.user) {
+        await AsyncStorage.setItem(
+          "userInfo",
+          JSON.stringify(response.data.user)
+        );
+      }
+
+      setModalType("success");
+      setModalMessage("✅ Login Successful!");
+      setModalVisible(true);
+
+      setTimeout(() => {
+        setModalVisible(false);
+        navigation.replace("Home");
+      }, 1500);
+
+      return;
+    }
+    setModalType("error");
+    setModalMessage("❌ Invalid credentials");
+    setModalVisible(true);
+
+  } catch (error: any) {
+    console.log("Login error:", error);
+
+    // ------- INVALID CREDENTIALS FROM BACKEND -------
+    if (error.response) {
+      const status = error.response.status;
+
+      if (status === 400 || status === 401 || status === 404) {
+        setModalType("error");
+        setModalMessage("❌ Invalid credentials");
+        setModalVisible(true);
+        return;
+      }
     }
 
-    setLoading(true);
-    animatePress();
+    // ------- NETWORK OR SERVER DOWN -------
+    setModalType("error");
+    setModalMessage("❌ Unable to connect to the server. Try again.");
+    setModalVisible(true);
 
-    setTimeout(() => {
-      setLoading(false);
-      if (employeeId === 'DT-12345' && password === '1234') {
-        setModalType('success');
-        setModalMessage('✅ Login Successful!');
-        setModalVisible(true);
-        setTimeout(() => {
-          setModalVisible(false);
-          navigation.replace('Home');
-        }, 1500);
-      } else {
-        setModalType('error');
-        setModalMessage('❌ Invalid Employee ID or password');
-        setModalVisible(true);
-      }
-    }, 1000);
-  };
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   return (
     <KeyboardAvoidingView

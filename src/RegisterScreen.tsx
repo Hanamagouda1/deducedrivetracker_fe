@@ -33,13 +33,14 @@ type RegistrationScreenNavigationProp = NativeStackNavigationProp<
 const RegisterScreen = () => {
   const navigation = useNavigation<RegistrationScreenNavigationProp>();
   const [employeeId, setEmployeeId] = useState('');
+  const [employeename, setEmployeename] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [modalType, setModalType] = useState<'success' | 'error' | null>(null);
   const [modalMessage, setModalMessage] = useState('');
-  const [focusedInput, setFocusedInput] = useState<string | null>(null); // <-- new state
+  const [focusedInput, setFocusedInput] = useState<string | null>(null);
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
   const animatePress = () => {
@@ -65,25 +66,39 @@ const RegisterScreen = () => {
 
   const handleRegister = async () => {
     const empIdPattern = /^DT-\d{5}$/;
-    if (!employeeId || !email || !password) {
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/; 
+
+    // 🔹 Validate all required fields
+    if (!employeeId || !employeename || !email || !password) {
       setModalType('error');
       setModalMessage('⚠️ All fields are required!');
       setModalVisible(true);
       return;
     }
-  // Validate employee ID format
-  if (!empIdPattern.test(employeeId)) {
-    setModalType('error');
-    setModalMessage('⚠️ Employee ID must be in the format DT-XXXXX');
-    setModalVisible(true);
-    return;
-  }
+
+    // 🔹 Validate employee ID format
+    if (!empIdPattern.test(employeeId)) {
+      setModalType('error');
+      setModalMessage('⚠️ Employee ID must be in the format DT-XXXXX');
+      setModalVisible(true);
+      return;
+    }
+
+    // 🔹 Validate DeduceTech email format
+    if (!emailPattern.test(email)) {
+      setModalType('error');
+      setModalMessage('⚠️ Email must end with @deducetech.in or @deducetech.com');
+      setModalVisible(true);
+      return;
+    }
+
     setLoading(true);
     animatePress();
 
     try {
-      const res = await axios.post('https://your-api.com/register', {
+      const res = await axios.post('https://deduce-drive-tracker-be.onrender.com/auth/register', {
         employee_id: employeeId,
+        employee_name: employeename,
         email,
         password,
       });
@@ -148,13 +163,27 @@ const RegisterScreen = () => {
             onBlur={() => setFocusedInput(null)}
           />
 
+          {/* Employee Name */}
+          <TextInput
+            style={[
+              styles.input,
+              focusedInput === 'employeeName' && styles.inputFocused,
+            ]}
+            placeholder="Employee Name"
+            placeholderTextColor="rgba(255,255,255,0.7)"
+            value={employeename}
+            onChangeText={setEmployeename}
+            onFocus={() => setFocusedInput('employeeName')}
+            onBlur={() => setFocusedInput(null)}
+          />
+
           {/* Email */}
           <TextInput
             style={[
               styles.input,
               focusedInput === 'email' && styles.inputFocused,
             ]}
-            placeholder="Email"
+            placeholder="Email (name@deducetech.in/.com)"
             placeholderTextColor="rgba(255,255,255,0.7)"
             value={email}
             onChangeText={setEmail}
@@ -179,6 +208,7 @@ const RegisterScreen = () => {
             onBlur={() => setFocusedInput(null)}
           />
 
+          {/* Register Button */}
           <Animated.View style={{ transform: [{ scale: scaleAnim }], width: '100%' }}>
             <Pressable
               onPress={handleRegister}
@@ -196,6 +226,7 @@ const RegisterScreen = () => {
             </Pressable>
           </Animated.View>
 
+          {/* Already have an account */}
           <View style={styles.bottomLinks}>
             <Text style={styles.linkLabel}>Already registered?</Text>
             <Pressable onPress={() => navigation.replace('Login')}>
@@ -205,49 +236,50 @@ const RegisterScreen = () => {
         </GlassCard>
       </ScrollView>
 
-      {/* Modal */}
+      {/* Success/Error Modal */}
       <Modal transparent visible={modalVisible} animationType="fade">
-      <View style={styles.modalContainer}>
-        <View
-          style={[
-            styles.modalContent,
-            {
-              backgroundColor: '#ffffff', 
-              borderColor: modalType === 'success' ? '#28a745' : '#ff4d4d',
-              borderWidth: 1.5,
-              shadowColor: '#000',
-              shadowOffset: { width: 0, height: 3 },
-              shadowOpacity: 0.25,
-              shadowRadius: 5,
-              elevation: 6,
-            },
-          ]}
-        >
-          <Text
+        <View style={styles.modalContainer}>
+          <View
             style={[
-              styles.modalText,
+              styles.modalContent,
               {
-                color: modalType === 'success' ? '#28a745' : '#ff4d4d',
+                backgroundColor: '#ffffff',
+                borderColor: modalType === 'success' ? '#28a745' : '#ff4d4d',
+                borderWidth: 1.5,
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 3 },
+                shadowOpacity: 0.25,
+                shadowRadius: 5,
+                elevation: 6,
               },
             ]}
           >
-            {modalMessage}
-          </Text>
-
-          {modalType === 'error' && (
-            <TouchableOpacity
+            <Text
               style={[
-                styles.modalButton,
-                { backgroundColor: modalType === 'error' ? '#ff4d4d' : '#28a745' },
+                styles.modalText,
+                { color: modalType === 'success' ? '#28a745' : '#ff4d4d' },
               ]}
-              onPress={() => setModalVisible(false)}
             >
-              <Text style={styles.modalButtonText}>Try Again</Text>
-            </TouchableOpacity>
-          )}
+              {modalMessage}
+            </Text>
+
+            {modalType === 'error' && (
+              <TouchableOpacity
+                style={[
+                  styles.modalButton,
+                  {
+                    backgroundColor:
+                      modalType === 'error' ? '#ff4d4d' : '#28a745',
+                  },
+                ]}
+                onPress={() => setModalVisible(false)}
+              >
+                <Text style={styles.modalButtonText}>Try Again</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
-      </View>
-    </Modal>
+      </Modal>
     </KeyboardAvoidingView>
   );
 };
@@ -281,9 +313,6 @@ const styles = StyleSheet.create({
   logo: {
     width: 60,
     height: 60,
-    alignItems: 'center',
-    justifyContent: 'center',
-    alignSelf: 'center',
     marginRight: 0,
   },
   title: {
@@ -293,11 +322,8 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     flexWrap: 'wrap',
     maxWidth: '60%',
-    textShadowColor: 'rgba(0,0,0,0.15)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
     textAlign: 'center',
-    marginLeft: 0, 
+    marginLeft: 0,
   },
   subtitle: {
     fontSize: 24,
@@ -314,7 +340,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
     marginBottom: 18,
     fontSize: 16,
-    color: '#black',
+    color: '#000',
   },
   inputFocused: {
     backgroundColor: 'rgba(255,255,255,0.35)',
@@ -351,14 +377,13 @@ const styles = StyleSheet.create({
     width: width * 0.75,
   },
   linkLabel: {
-    color: '#black',
+    color: '#000',
     fontSize: 14,
   },
   linkText: {
     color: 'black',
     fontSize: 14,
     textDecorationLine: 'underline',
-    opacity: 1,
   },
   modalContainer: {
     flex: 1,
@@ -371,7 +396,6 @@ const styles = StyleSheet.create({
     padding: 25,
     borderRadius: 20,
     alignItems: 'center',
-    borderWidth: 1.5,
   },
   modalText: {
     fontSize: 18,

@@ -22,6 +22,7 @@ import { RootStackParamList } from "../App";
 import styles from "./HomeScreen.styles";
 import MapHTML from "./MapHTML";
 import Geolocation from "@react-native-community/geolocation";
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 type LatLng = { lat: number; lng: number };
 type HomeScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, "Home">;
@@ -38,11 +39,32 @@ const HomeScreen: React.FC = () => {
   const [_currentLocation, setCurrentLocation] = useState<LatLng | null>(null);
   const [logoutModalVisible, setLogoutModalVisible] = useState(false);
 
+  // 👇 NEW: USER STATE
+  const [userInfo, setUserInfo] = useState<any>(null);
+
   const webViewRef = useRef<WebView | null>(null);
   const watchIdRef = useRef<number | null>(null);
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   const API_URL = "https://jsonplaceholder.typicode.com/users";
+
+  // ----------------------------------------------------------
+  // 🔥 Load user data on screen load
+  // ----------------------------------------------------------
+  useEffect(() => {
+    const loadUser = async () => {
+      try {
+        const storedUser = await AsyncStorage.getItem('userInfo');
+        if (storedUser) {
+          setUserInfo(JSON.parse(storedUser));
+        }
+      } catch (error) {
+        console.log("Error loading user info:", error);
+      }
+    };
+
+    loadUser();
+  }, []);
 
   const postMessageToMap = useCallback((obj: any) => {
     if (webViewRef.current) webViewRef.current.postMessage(JSON.stringify(obj));
@@ -154,15 +176,26 @@ const HomeScreen: React.FC = () => {
     }).start();
   };
 
-  const handleLogout = useCallback(() => {
+  // ----------------------------------------------------------
+  // 🔥 LOGOUT - remove token + user info
+  // ----------------------------------------------------------
+  const handleLogout = useCallback(async () => {
     Animated.timing(fadeAnim, {
       toValue: 0,
       duration: 250,
       easing: Easing.ease,
       useNativeDriver: true,
-    }).start(() => {
+    }).start(async () => {
       setLogoutModalVisible(false);
+
       if (tracking) stopTracking();
+
+      try {
+        await AsyncStorage.removeItem('accessToken');
+        await AsyncStorage.removeItem('userInfo');
+      } catch (error) {
+        console.warn("Error clearing storage:", error);
+      }
 
       navigation.dispatch(
         CommonActions.reset({
@@ -171,7 +204,9 @@ const HomeScreen: React.FC = () => {
         })
       );
     });
-  }, [navigation, stopTracking, tracking, fadeAnim]);
+  }, [navigation, tracking, stopTracking, fadeAnim]);
+
+  // ----------------------------------------------------------
 
   useEffect(() => {
     const fetchDriveDetails = async () => {
@@ -201,7 +236,7 @@ const HomeScreen: React.FC = () => {
     try {
       const data = JSON.parse(event.nativeEvent.data);
       if (data?.type === "mapReady") initMap();
-    } catch {}
+    } catch { }
   };
 
   return (
@@ -210,19 +245,19 @@ const HomeScreen: React.FC = () => {
 
       {/* HEADER */}
       <View
-          style={[
-            styles.header,
-            {
-              backgroundColor: theme.header,
-              paddingTop: Platform.OS === "android" ? StatusBar.currentHeight || 20 : 40,
-              paddingHorizontal: 10,
-              height: Platform.OS === "android" ? 100 : 140, 
-              flexDirection: "row",
-              justifyContent: "space-between",
-              alignItems: "flex-start",
-            },
-          ]}
-        >
+        style={[
+          styles.header,
+          {
+            backgroundColor: theme.header,
+            paddingTop: Platform.OS === "android" ? StatusBar.currentHeight || 20 : 40,
+            paddingHorizontal: 10,
+            height: Platform.OS === "android" ? 100 : 140,
+            flexDirection: "row",
+            justifyContent: "space-between",
+            alignItems: "flex-start",
+          },
+        ]}
+      >
         <View>
           <TouchableOpacity onPress={toggleMenu}>
             <Image
@@ -236,11 +271,29 @@ const HomeScreen: React.FC = () => {
           </TouchableOpacity>
 
           {menuVisible && (
-            <View style={[styles.popupMenu, { backgroundColor: isDarkMode ? "#1b1f23" : "#fff", borderColor: theme.glassBorder, borderWidth: 1 }]}>
+            <View
+              style={[
+                styles.popupMenu,
+                {
+                  backgroundColor: isDarkMode ? "#1b1f23" : "#fff",
+                  borderColor: theme.glassBorder,
+                  borderWidth: 1,
+                },
+              ]}
+            >
               <Text style={[styles.menuTitle, { color: theme.text }]}>Menu</Text>
 
               {/* Dark Mode */}
-              <View style={[styles.menuItem, { flexDirection: "row", alignItems: "center", justifyContent: "space-between" }]}>
+              <View
+                style={[
+                  styles.menuItem,
+                  {
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                  },
+                ]}
+              >
                 <Text style={[styles.menuText, { color: theme.text }]}>Dark Mode</Text>
                 <Switch
                   value={isDarkMode}
@@ -251,7 +304,16 @@ const HomeScreen: React.FC = () => {
               </View>
 
               {/* Calendar */}
-              <View style={[styles.menuItem, { flexDirection: "row", alignItems: "center", justifyContent: "space-between" }]}>
+              <View
+                style={[
+                  styles.menuItem,
+                  {
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                  },
+                ]}
+              >
                 <Text style={[styles.menuText, { color: theme.text }]}>Calendar</Text>
                 <TouchableOpacity onPress={() => setShowDatePicker(true)}>
                   <Image
@@ -284,7 +346,12 @@ const HomeScreen: React.FC = () => {
                   data={driveData}
                   keyExtractor={(item) => item.id.toString()}
                   renderItem={({ item }) => (
-                    <Text style={[styles.menuSubText, { color: theme.text, opacity: 0.85, paddingVertical: 4 }]}>
+                    <Text
+                      style={[
+                        styles.menuSubText,
+                        { color: theme.text, opacity: 0.85, paddingVertical: 4 },
+                      ]}
+                    >
                       {item.date} — {item.distance} km @ {item.avgSpeed} km/h
                     </Text>
                   )}
@@ -294,16 +361,27 @@ const HomeScreen: React.FC = () => {
           )}
         </View>
 
+        {/* ------------------------------------------ */}
+        {/* ⭐ DISPLAY LOGGED-IN USER INFO HERE */}
+        {/* ------------------------------------------ */}
         <View style={styles.logoUserContainer}>
           <Image source={require("../assets/CompanyLogo.png")} style={styles.logo} />
+
           <View style={styles.userInfo}>
-            <Text style={[styles.userName, { color: "#fff" }]}>John Doe</Text>
-            <Text style={[styles.userId, { color: "#d0e6ff" }]}>ID: 12345</Text>
+            <Text style={[styles.userName, { color: "#fff" }]}>
+              {userInfo?.employee_name || "Loading..."}
+            </Text>
+            <Text style={[styles.userId, { color: "#d0e6ff" }]}>
+              {userInfo?.employee_id || "--"}
+            </Text>
           </View>
         </View>
 
         <TouchableOpacity onPress={showLogoutModal}>
-          <Image source={{ uri: "https://img.icons8.com/ios-filled/50/ffffff/logout-rounded.png" }} style={styles.icon} />
+          <Image
+            source={{ uri: "https://img.icons8.com/ios-filled/50/ffffff/logout-rounded.png" }}
+            style={styles.icon}
+          />
         </TouchableOpacity>
       </View>
 
@@ -318,14 +396,17 @@ const HomeScreen: React.FC = () => {
           onLoadEnd={onWebViewMessage}
           javaScriptEnabled
           domStorageEnabled
-          geolocationEnabled 
+          geolocationEnabled
         />
       </View>
 
       {/* FOOTER */}
       <View style={[styles.footer, { backgroundColor: theme.footer }]}>
         <TouchableOpacity
-          style={[styles.stopButton, { backgroundColor: !tracking ? "#6c757d" : "#dc3545" }]}
+          style={[
+            styles.stopButton,
+            { backgroundColor: !tracking ? "#6c757d" : "#dc3545" },
+          ]}
           onPress={stopTracking}
           disabled={!tracking}
         >
@@ -333,7 +414,10 @@ const HomeScreen: React.FC = () => {
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.startButton, { backgroundColor: tracking ? "#6c757d" : "#28a745" }]}
+          style={[
+            styles.startButton,
+            { backgroundColor: tracking ? "#6c757d" : "#28a745" },
+          ]}
           onPress={startTracking}
           disabled={tracking}
         >
@@ -375,11 +459,15 @@ const HomeScreen: React.FC = () => {
             >
               Confirm Logout
             </Text>
-            <Text style={{ color: theme.text, textAlign: "center", marginBottom: 25 }}>
+            <Text
+              style={{ color: theme.text, textAlign: "center", marginBottom: 25 }}
+            >
               Are you sure you want to logout?
             </Text>
 
-            <View style={{ flexDirection: "row", justifyContent: "space-around" }}>
+            <View
+              style={{ flexDirection: "row", justifyContent: "space-around" }}
+            >
               <TouchableOpacity
                 style={{
                   backgroundColor: "#6c757d",
