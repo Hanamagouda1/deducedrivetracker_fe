@@ -17,8 +17,8 @@ import {
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { RootStackParamList } from '../App';
-import GlassCard from './SharedGlassCard';
+import { RootStackParamList } from '../../App';
+import GlassCard from '../styles/SharedGlassCard';
 
 type ForgotPasswordScreenNavigationProp = NativeStackNavigationProp<
   RootStackParamList,

@@ -18,8 +18,8 @@ import {
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { RootStackParamList } from '../App';
-import GlassCard from './SharedGlassCard';
+import { RootStackParamList } from '../../App';
+import GlassCard from '../styles/SharedGlassCard';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -64,16 +64,15 @@ const LoginScreen = () => {
 
 
 const handleLogin = async () => {
-   // 🔹 Validate all required fields
+
   if (!employeeId || !password) {
-      setModalType('error');
-      setModalMessage('⚠️ All fields are required!');
-      setModalVisible(true);
-      return;
+    setModalType("error");
+    setModalMessage("⚠️ All fields are required!");
+    setModalVisible(true);
+    return;
   }
 
   const empIdPattern = /^DT-\d{5}$/;
-
   if (!empIdPattern.test(employeeId)) {
     setModalType("error");
     setModalMessage("⚠️ Employee ID must be in the format DT-XXXXX");
@@ -85,55 +84,75 @@ const handleLogin = async () => {
   animatePress();
 
   try {
-    const response = await axios.post("https://deduce-drive-tracker-be.onrender.com/auth/login", {
-      employee_id: employeeId,
-      password,
-    });
+    try {
+      await axios.post(
+        "https://deduce-drive-tracker-be.onrender.com/auth/login",
+        {
+          employee_id: employeeId,
+          password: "dummy-password"
+        }
+      );
+    } catch (err: any) {
+      const msg = err?.response?.data?.detail || err?.response?.data?.message || "";
 
-    // ------- SUCCESS CASE -------
-    if (response.data.access_token) {
-      // Store token
-      await AsyncStorage.setItem("accessToken", response.data.access_token);
-
-      // Store user info (only if backend returns it)
-      if (response.data.user) {
-        await AsyncStorage.setItem(
-          "userInfo",
-          JSON.stringify(response.data.user)
-        );
-      }
-
-      setModalType("success");
-      setModalMessage("✅ Login Successful!");
-      setModalVisible(true);
-
-      setTimeout(() => {
-        setModalVisible(false);
-        navigation.replace("Home");
-      }, 1500);
-
-      return;
-    }
-    setModalType("error");
-    setModalMessage("❌ Invalid credentials");
-    setModalVisible(true);
-
-  } catch (error: any) {
-    console.log("Login error:", error);
-
-    // ------- INVALID CREDENTIALS FROM BACKEND -------
-    if (error.response) {
-      const status = error.response.status;
-
-      if (status === 400 || status === 401 || status === 404) {
+      if (msg.toLowerCase().includes("not found") ||
+          msg.toLowerCase().includes("not registered") ||
+          msg.toLowerCase().includes("employee not")) 
+      {
         setModalType("error");
-        setModalMessage("❌ Invalid credentials");
+        setModalMessage("❌ You are not yet registered. Please register first.");
         setModalVisible(true);
+        setLoading(false);
         return;
       }
     }
 
-    // ------- NETWORK OR SERVER DOWN -------
+    const res = await axios.post(
+      "https://deduce-drive-tracker-be.onrender.com/auth/login",
+      {
+        employee_id: employeeId,
+        password,
+      }
+    );
+
+    if (!res.data.access_token) {
+      setModalType("error");
+      setModalMessage("❌ Invalid credentials");
+      setModalVisible(true);
+      setLoading(false);
+      return;
+    }
+
+    // SAVE TOKEN
+    await AsyncStorage.setItem("accessToken", res.data.access_token);
+
+    // SAVE USER PROFILE
+    if (res.data.user) {
+      await AsyncStorage.setItem("userInfo", JSON.stringify(res.data.user));
+    }
+
+    // SUCCESS
+    setModalType("success");
+    setModalMessage("✅ Login Successful!");
+    setModalVisible(true);
+
+    setTimeout(() => {
+      setModalVisible(false);
+      navigation.replace("Home");
+    }, 1500);
+
+  } catch (error: any) {
+    console.log("Login error:", error);
+
+    // Wrong password
+    if (error?.response?.status === 401) {
+      setModalType("error");
+      setModalMessage("❌ Invalid credentials");
+      setModalVisible(true);
+      return;
+    }
+
+    // Server down / no internet
     setModalType("error");
     setModalMessage("❌ Unable to connect to the server. Try again.");
     setModalVisible(true);
@@ -142,6 +161,7 @@ const handleLogin = async () => {
     setLoading(false);
   }
 };
+
 
 
   return (
