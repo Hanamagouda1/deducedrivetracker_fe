@@ -13,14 +13,15 @@ import {
   PermissionsAndroid,
   BackHandler,
 } from "react-native";
-import MapViewComponent from "../components/MapViewComponent";
+// import MapViewComponent from "../components/MapViewComponent";
+import MapComponent from "../components/MapComponent";
 import DriveHistoryList from "../components/DriveHistoryList";
-import UploadModal from "../components/UploadModal";
+import UploadModal from "../components/PlotModal";
 import ToastComponent from "../components/ToastComponent";
 import useToast from "../utils/useToast";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { CommonActions, useNavigation } from "@react-navigation/native";
-import { calculateDistance } from "../utils/distance";
+// import { calculateDistance } from "../utils/distance";
 import Geolocation from "@react-native-community/geolocation";
 import axios from "axios";
 import styles from "../styles/HomeScreen.styles";
@@ -73,7 +74,7 @@ const HomeScreen: React.FC = () => {
   const [driveStopped, setDriveStopped] = useState(false);
 
   const [uploadModalVisible, setUploadModalVisible] = useState(false);
-  const [uploading, setUploading] = useState(false);
+  const [uploading, _setUploading] = useState(false);
 
   const [logoutModalVisible, setLogoutModalVisible] = useState(false);
 
@@ -81,6 +82,7 @@ const HomeScreen: React.FC = () => {
   const [totalKm, setTotalKm] = useState("0.0");
 
   const webRef = useRef<any>(null);
+  const [currentSessionId, setCurrentSessionId] = useState<number | null>(null);
 
   /** Send data to Map */
   const postToMap = useCallback(
@@ -210,11 +212,11 @@ const HomeScreen: React.FC = () => {
 
         const norm = Array.isArray(points)
           ? points
-              .map((p: any) => ({
-                lat: Number(p.lat ?? p.latitude ?? p[0]),
-                lng: Number(p.lng ?? p.longitude ?? p[1]),
-              }))
-              .filter((x) => !isNaN(x.lat) && !isNaN(x.lng))
+              .map((p: any) => ([
+                  Number(p.lng ?? p.longitude ?? p[1]),
+                  Number(p.lat ?? p.latitude ?? p[0])
+              ]))
+              .filter(([lng, lat]) => !isNaN(lng) && !isNaN(lat))
           : [];
 
         if (norm.length === 0) {
@@ -224,18 +226,10 @@ const HomeScreen: React.FC = () => {
 
         postToMap({ type: "clear" });
         postToMap({
-          type: "displayTrack",
-          payload: {
-            session_id: sessionId,
-            points: norm,
-            meta: {
-              start_time: data.start_time,
-              end_time: data.end_time,
-              total_km: data.total_km,
-            },
-            color: "#ff6b00",
-          },
+          type: "displayTrackAndFit",
+          payload: norm,
         });
+
       } catch (err) {
         console.warn("session error", err);
         showToast("Failed to fetch session", "error");
@@ -265,6 +259,22 @@ const HomeScreen: React.FC = () => {
       return;
     }
 
+    try {
+      const token = await AsyncStorage.getItem("accessToken");
+      const startRes = await axios.post(
+        `${API_BASE}/drive/start`,
+        {
+          employeeId: userInfo?.employee_id,
+          employeeName: userInfo?.employee_name,
+        },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      setCurrentSessionId(startRes.data.session_id);
+    } catch {
+      return showToast("Error starting drive", "error");
+    }
+
     setCurrentDriveTrack([]);
     setTracking(true);
     setDriveStopped(false);
@@ -289,7 +299,7 @@ const HomeScreen: React.FC = () => {
     );
 
     watchIdRef.current = Geolocation.watchPosition(
-      (pos) => {
+      async (pos) => {
         const p = {
           lat: pos.coords.latitude,
           lng: pos.coords.longitude,
@@ -297,14 +307,27 @@ const HomeScreen: React.FC = () => {
         };
         setCurrentDriveTrack((prev) => [...prev, p]);
         postToMap({ type: "coord", payload: p });
+
+        if (currentSessionId) {
+          try {
+            await axios.post(
+              `${API_BASE}/drive/add-point?session_id=${currentSessionId}`,
+              {
+                lat: p.lat,
+                lng: p.lng,
+                timestamp: p.timestamp,
+              }
+            );
+          } catch {}
+        }
       },
       () => showToast("GPS error", "error"),
       { enableHighAccuracy: true, distanceFilter: 1 }
     );
-  }, [postToMap, requestLocationPermission, tracking, showToast]);
+  }, [postToMap, requestLocationPermission, tracking, showToast, userInfo, currentSessionId]);
 
   /** STOP TRACKING */
-  const stopTracking = useCallback(() => {
+  const stopTracking = useCallback(async () => {
     if (watchIdRef.current != null) {
       Geolocation.clearWatch(watchIdRef.current);
       watchIdRef.current = null;
@@ -313,68 +336,39 @@ const HomeScreen: React.FC = () => {
     setTracking(false);
     setDriveStopped(true);
 
-    if (currentDriveTrack.length < 2) {
-      showToast("Drive too short", "info");
-      setCurrentDriveTrack([]);
-      setDriveStopped(false);
+    if (!currentSessionId) {
+      showToast("Session missing", "error");
       return;
     }
 
-    showToast("Drive stopped", "info");
-  }, [currentDriveTrack, showToast]);
+    try {
+      await axios.post(`${API_BASE}/drive/stop?session_id=${currentSessionId}`);
+      showToast("Drive stopped", "info");
+    } catch {
+      showToast("Stop failed", "error");
+    }
+  }, [currentSessionId, showToast]);
 
-  /** UPLOAD DRIVE */
-  const handleUpload = useCallback(async () => {
+  /** PLOT DRIVE (instead of upload) */
+  const handleUpload = useCallback(() => {
     if (currentDriveTrack.length < 2) {
       showToast("Not enough points", "error");
       return;
     }
 
-    setUploading(true);
+    const formatted = currentDriveTrack.map((p) => [p.lng, p.lat]);
+    postToMap({
+      type: "displayTrackAndFit",
+      payload: formatted,
+    });
 
-    try {
-      const token = await AsyncStorage.getItem("accessToken");
+    setUploadModalVisible(false);
+    setDriveStopped(false);
+    setCurrentDriveTrack([]);
+    setCurrentSessionId(null);
 
-      const payload = {
-        userId: userInfo?.id,
-        employeeId: userInfo?.employee_id,
-        employeeName: userInfo?.employee_name,
-        email: userInfo?.email,
-        phone: userInfo?.phone ?? null,
-
-        startTime: currentDriveTrack[0].timestamp,
-        endTime: currentDriveTrack[currentDriveTrack.length - 1].timestamp,
-
-        trackPoints: currentDriveTrack.map((p) => ({
-          lat: p.lat,
-          lng: p.lng,
-          timestamp: p.timestamp,
-          speed: p.speed ?? null,
-          heading: p.heading ?? null,
-        })),
-
-        distance: calculateDistance(currentDriveTrack),
-      };
-
-      const res = await axios.post(`${API_BASE}/drive/add-point`, payload, {
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-      });
-
-      if (res.status === 200 || res.status === 201) {
-        showToast("Drive uploaded", "success");
-        setUploadModalVisible(false);
-        setDriveStopped(false);
-        setCurrentDriveTrack([]);
-        fetchStats();
-      } else {
-        showToast("Upload failed", "error");
-      }
-    } catch {
-      showToast("Upload error", "error");
-    } finally {
-      setUploading(false);
-    }
-  }, [currentDriveTrack, userInfo, fetchStats, showToast]);
+    showToast("Drive Plotted Successfully", "success");
+  }, [currentDriveTrack, postToMap, showToast]);
 
   /** LOGOUT */
   const handleLogout = async () => {
@@ -493,7 +487,7 @@ const HomeScreen: React.FC = () => {
 
       {/* MAP */}
       <View style={{ flex: 1 }}>
-        <MapViewComponent
+        <MapComponent
           refForward={webRef}
           onMapReady={onMapReady}
           onMessage={onWebMessage}
@@ -535,7 +529,7 @@ const HomeScreen: React.FC = () => {
             style={[styles.startButton, { backgroundColor: theme.buttonStart }]}
           >
             <Text style={[styles.buttonText, { color: "#fff" }]}>
-              📤 Upload Drive
+              📤 Plot Drive
             </Text>
           </TouchableOpacity>
         )}
