@@ -232,7 +232,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     alignSelf: 'center',
-    marginRight: 0,
+    marginRight: 5,
   },
   title: {
     fontSize: 26,

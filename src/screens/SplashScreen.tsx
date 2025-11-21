@@ -46,7 +46,7 @@ const SplashScreen = () => {
       // Redirect after animation completes
       setTimeout(() => {
         navigation.replace("Login");
-      }, 800);
+      }, 1000);
     });
   }, []);
 

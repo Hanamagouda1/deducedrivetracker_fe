@@ -84,6 +84,7 @@ const HomeScreen: React.FC = () => {
 
   const webRef = useRef<any>(null);
   const [currentSessionId, setCurrentSessionId] = useState<number | null>(null);
+  const sessionRef = useRef<number | null>(null);
 
   /** Send data to Map */
   const postToMap = useCallback(
@@ -196,9 +197,6 @@ const HomeScreen: React.FC = () => {
             .filter(([lng, lat]: [number, number]) => !isNaN(lng) && !isNaN(lat))
         : []
     );
-
-
-      // 👇 Do NOT clear map — we always want to keep these background lines
       postToMap({
         type: "displayAllTracks",
         payload: allTracks,
@@ -212,13 +210,13 @@ const HomeScreen: React.FC = () => {
 
 
   /** SELECT SESSION - Public */
-interface DrivePoint {
-  latitude?: number | string;
-  longitude?: number | string;
-  lat?: number | string;
-  lng?: number | string;
-  [key: string]: any;
-}
+  interface DrivePoint {
+    latitude?: number | string;
+    longitude?: number | string;
+    lat?: number | string;
+    lng?: number | string;
+    [key: string]: any;
+  }
 
 /** SELECT SESSION */
 const handleSelectSession = useCallback(
@@ -228,7 +226,7 @@ const handleSelectSession = useCallback(
       const allSessions: any[] = res.data?.sessions || [];
 
       if (mode === "clear") {
-        postToMap({ type: "clearSelected" });
+        postToMap({ type: "clear" });
         showToast("Cleared", "info");
         return;
       }
@@ -309,6 +307,7 @@ const handleSelectSession = useCallback(
       );
 
       setCurrentSessionId(startRes.data.session_id);
+      sessionRef.current = startRes.data.session_id;
     } catch {
       return showToast("Error starting drive", "error");
     }
@@ -351,17 +350,29 @@ const handleSelectSession = useCallback(
         setCurrentDriveTrack((prev) => [...prev, p]);
         postToMap({ type: "coord", payload: p });
 
-        if (currentSessionId) {
+        if (sessionRef.current) {
           try {
+            const token = await AsyncStorage.getItem("accessToken");
+
             await axios.post(
-              `${API_BASE}/drive/add-point?session_id=${currentSessionId}`,
+              `${API_BASE}/drive/add-point?session_id=${sessionRef.current}`,
               {
-                lat: p.lat,
-                lng: p.lng,
-                timestamp: p.timestamp,
+                latitude: p.lat,
+                longitude: p.lng,
+                speed: pos.coords.speed ?? 0,
+                heading: pos.coords.heading ?? 0,
+              },
+              {
+                headers: { Authorization: `Bearer ${token}` },
               }
             );
-          } catch {}
+          } catch (err) {
+            if (axios.isAxiosError(err)) {
+              console.log("Add point failed:", err.response?.data);
+            } else {
+              console.log("Add point failed (unknown error):", err);
+            }
+          }
         }
       },
       () => showToast("GPS error", "error"),
@@ -404,66 +415,58 @@ const handleSelectSession = useCallback(
 
 
 
-  /** PLOT DRIVE (instead of plot) */
-  const handlePlot = useCallback(async () => {
-  try {
-    const token = await AsyncStorage.getItem("accessToken");
-    if (!token) {
-      showToast("Session expired. Login again.", "error");
-      return;
+  /** 🛰️ PLOT DRIVE (show ALL sessions in grey) */
+    const handlePlot = useCallback(async () => {
+    try {
+      const token = await AsyncStorage.getItem("accessToken");
+      if (!token) {
+        showToast("Session expired. Login again.", "error");
+        return;
+      }
+
+      // today date only
+      const dateStr = new Date().toISOString().split("T")[0];
+
+      const res = await axios.get(`${API_BASE}/drive/by-date`, {
+        headers: { Authorization: `Bearer ${token}` },
+        params: { date: dateStr },
+      });
+
+      const sessions = Array.isArray(res.data?.sessions) ? res.data.sessions : [];
+
+      const todayTracks: [number, number][][] = sessions.map((ses: any) =>
+        Array.isArray(ses.points)
+          ? ses.points
+              .map((p: any) => [
+                Number(p.longitude ?? p.lng),
+                Number(p.latitude ?? p.lat),
+              ])
+              .filter(([lng, lat]: [number, number]) => !isNaN(lng) && !isNaN(lat))
+          : []
+      );
+
+      // SEND TO MAP
+      postToMap({
+        type: "displayTodayTrack",
+        payload: todayTracks,
+      });
+
+      showToast("Today's drive displayed", "success");
+
+      setPlotModalVisible(false);
+      setDriveStopped(false);
+      setTracking(false);
+      setStopFailed(false);
+      setCurrentDriveTrack([]);
+      setCurrentSessionId(null);
+      setIsPlotted(true);
+
+    } catch (err) {
+      console.log("Plot error:", err);
+      showToast("Failed to plot today's drive", "error");
     }
+  }, [postToMap, showToast]);
 
-    // 📅 Today date: YYYY-MM-DD
-    const dateStr = new Date().toISOString().split("T")[0];
-
-    // 🔥 Fetch Today’s Sessions
-    const res = await axios.get(`${API_BASE}/drive/by-date`, {
-      headers: { Authorization: `Bearer ${token}` },
-      params: { date: dateStr },
-    });
-
-    const sessions = Array.isArray(res.data?.sessions) ? res.data.sessions : [];
-
-    if (sessions.length === 0) {
-      showToast("No drive sessions found for today", "info");
-      return;
-    }
-
-    // 🔹 Convert into gray-track format
-    const allTracks: [number, number][][] = sessions.map((ses: any) =>
-      Array.isArray(ses.points)
-        ? ses.points
-            .map((p: DrivePoint): [number, number] => {
-            const lng: number = Number(p.longitude ?? p.lng);
-            const lat: number = Number(p.latitude ?? p.lat);
-            return [lng, lat];
-            })
-            .filter(([lng, lat]: [number, number]) => !isNaN(lng) && !isNaN(lat))
-
-        : []
-    );
-
-    // 🚀 Show ALL today tracks in grey + fit bounds
-    postToMap({
-      type: "displayAllTracks",
-      payload: allTracks,
-    });
-
-    showToast("Today's drive plotted successfully", "success");
-
-     // 🔄 Correct UI state after plot
-    setPlotModalVisible(false);
-    setDriveStopped(false);     // 👈 Show Start/Stop buttons again
-    setTracking(false);         // 👈 Ensure no active tracking blocks logout
-    setStopFailed(false);       // 👈 Ensure footer does not show Plot again
-    setCurrentDriveTrack([]);
-    setCurrentSessionId(null);
-    setIsPlotted(true);   
-  } catch (err) {
-    console.log("Plot error:", err);
-    showToast("Failed to plot today's drive", "error");
-  }
-}, [postToMap, showToast]);
 
 
   /** LOGOUT */

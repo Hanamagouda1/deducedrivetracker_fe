@@ -34,6 +34,28 @@ const EmptySessions = () => (
   </Text>
 );
 
+const formatTime = (ts?: string) => {
+  if (!ts) return "--";
+
+  // Supports both "YYYY-MM-DD HH:MM:SS" and "YYYY-MM-DDTHH:MM:SS"
+  const clean = ts.replace("T", " "); // convert T → space
+
+  const parts = clean.split(" ");
+  if (parts.length < 2) return "--";
+
+  const timePart = parts[1]; // "HH:MM:SS"
+  const [hrStr, minStr] = timePart.split(":");
+  let hr = Number(hrStr);
+  const min = minStr;
+
+  const ampm = hr >= 12 ? "PM" : "AM";
+  if (hr === 0) hr = 12;
+  else if (hr > 12) hr -= 12;
+
+  return `${hr}:${min} ${ampm}`;
+};
+
+
 const DriveHistoryItem = ({
   item,
   expanded,
@@ -45,9 +67,7 @@ const DriveHistoryItem = ({
   onExpand: () => void;
   onSelectSession: (id: number, mode?: string) => void;
 }) => {
-  const displayLabel = item.start_time
-    ? new Date(item.start_time).toLocaleTimeString()
-    : "Session";
+  const displayLabel = formatTime(item.start_time);
 
   return (
     <View style={{ marginBottom: 10 }}>
@@ -76,8 +96,8 @@ const DriveHistoryItem = ({
             borderRadius: 8,
           }}
         >
-          <Text>Start: {item.start_time ? new Date(item.start_time).toLocaleString() : "--"}</Text>
-          <Text>End: {item.end_time ? new Date(item.end_time).toLocaleString() : "--"}</Text>
+          <Text>Start: {formatTime(item.start_time)}</Text>
+          <Text>End: {formatTime(item.end_time)}</Text>
           <Text>Distance: {item.total_km ?? "--"} km</Text>
 
           <View style={{ flexDirection: "row", marginTop: 10, justifyContent: "space-between" }}>

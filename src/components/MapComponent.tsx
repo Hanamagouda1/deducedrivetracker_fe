@@ -13,7 +13,6 @@ import MapLibreGL from "@maplibre/maplibre-react-native";
 import Geolocation from "@react-native-community/geolocation";
 import CompassHeading from "react-native-compass-heading";
 import Config from "react-native-config";
-
 const MAPTILER_KEY = Config.MAPTILER_KEY;
 
 MapLibreGL.setAccessToken(null);
@@ -34,8 +33,8 @@ const ICONS = {
   terrain: "https://img.icons8.com/color/48/mountain.png",
 } as const;
 
-const START_PIN_ICON = "https://img.icons8.com/fluency/48/marker.png";
-const END_PIN_ICON = "https://img.icons8.com/color/48/marker.png";
+// const START_PIN_ICON = "https://img.icons8.com/color/48/filled-flag.png";
+// const END_PIN_ICON = "https://img.icons8.com/color/48/marker.png";
 
 type MapStyleKey = keyof typeof MAP_STYLES;
 type Coord = [number, number];
@@ -128,8 +127,10 @@ const MapComponent: React.FC<Props> = ({ onMapReady, refForward, onMessage }) =>
   const cameraRef = useRef<any>(null);
   const firstFixDone = useRef(false); 
   const [styleKey, setStyleKey] = useState<MapStyleKey>("osm");
-  const [path, setPath] = useState<Coord[]>([]);
-  const [allHistoryTracks, setAllHistoryTracks] = useState<Coord[][]>([]);
+  const [livePath, setLivePath] = useState<Coord[]>([]);
+  const [historyPaths, setHistoryPaths] = useState<Coord[][]>([]);
+  const [highlightedPath, setHighlightedPath] = useState<Coord[]>([]);
+  const [todayPaths, setTodayPaths] = useState<Coord[][]>([]);
   const [start, setStart] = useState<Coord | null>(null);
   const [end, setEnd] = useState<Coord | null>(null);
   const [currentCoord, setCurrentCoord] = useState<Coord | null>(null);
@@ -144,17 +145,19 @@ const MapComponent: React.FC<Props> = ({ onMapReady, refForward, onMessage }) =>
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const retainScale = useRef(new Animated.Value(1)).current;
 
+  const rippleAnim = useRef(new Animated.Value(0)).current;
   const pulse1 = useRef(new Animated.Value(0)).current;
   const pulse2 = useRef(new Animated.Value(0)).current;
 
   const [isMoving, setIsMoving] = useState(false);
   const lastCoordRef = useRef<Coord | null>(null);
   const lastUpdate = useRef<number>(0);
+  const CAMERA_ANIM = 150;
 
   const animateRetain = (to: number) => {
     Animated.timing(retainScale, {
       toValue: to,
-      duration: 120,
+      duration: 100,
       easing: Easing.out(Easing.ease),
       useNativeDriver: true,
     }).start();
@@ -188,15 +191,19 @@ const MapComponent: React.FC<Props> = ({ onMapReady, refForward, onMessage }) =>
       if (type === "startLive") {
         const [lat, lng] = payload.startLocation;
         const pt: Coord = [lng, lat];
-        setPath([pt]);
+
+  
+        setLivePath([pt]);
         setStart(pt);
         setEnd(null);
         setCurrentCoord(pt);
+        setHighlightedPath([]); 
 
         cameraRef.current?.setCamera({
           centerCoordinate: pt,
           zoomLevel: zoom,
-          animationDuration: 500,
+          animationDuration: CAMERA_ANIM,
+          animationMode: "ease",
         });
       }
 
@@ -204,59 +211,90 @@ const MapComponent: React.FC<Props> = ({ onMapReady, refForward, onMessage }) =>
         const { lat, lng } = payload;
         if (typeof lat === "number" && typeof lng === "number") {
           const pt: Coord = [lng, lat];
-          setPath((prev) => [...prev, pt]);
+          setLivePath((prev) => [...prev, pt]);
           setCurrentCoord(pt);
 
           cameraRef.current?.setCamera({
             centerCoordinate: pt,
-            animationDuration: 350,
+            animationDuration: 0,
           });
         }
       }
 
       if (type === "displayTrackAndFit") {
-        const pts = Array.isArray(payload) ? payload : [];
-        if (pts.length < 2) return;
+          const pts = Array.isArray(payload) ? payload : [];
+          if (pts.length < 2) return;
 
-        setViewMode("history");
-        setPath(pts);
-        setStart(pts[0]);
-        setEnd(pts[pts.length - 1]);
-        setCurrentCoord(pts[pts.length - 1]);
+          setViewMode("history");
+          setHighlightedPath(pts);
+          setStart(pts[0]);
+          setEnd(pts[pts.length - 1]);
+          setCurrentCoord(pts[pts.length - 1]);
 
-        setTimeout(() => {
-          try {
-            cameraRef.current?.fitBounds(pts[0], pts[pts.length - 1], 80, 80);
-          } catch {}
-        }, 250);
-      }
+          setTimeout(() => {
+            try {
+              const [minLng, minLat] = pts[0];
+              const [maxLng, maxLat] = pts[pts.length - 1];
+
+              // 1️⃣ CENTER of route
+              const centerLng = (minLng + maxLng) / 2;
+              const centerLat = (minLat + maxLat) / 2;
+
+              // 2️⃣ Find best zoom based on distance (simple auto-zoom)
+              const dx = Math.abs(maxLng - minLng);
+              const dy = Math.abs(maxLat - minLat);
+              const maxDiff = Math.max(dx, dy);
+
+              // Auto zoom estimate (adjustable)
+              let autoZoom = 16 - Math.log2(maxDiff * 120);
+              autoZoom = Math.min(Math.max(autoZoom, 12), 17);
+
+              // 3️⃣ Smooth animated camera movement
+              cameraRef.current?.setCamera({
+                centerCoordinate: [centerLng, centerLat],
+                zoomLevel: autoZoom,
+                animationDuration: 1200,
+                animationMode: "ease",
+              });
+
+            } catch (err) {
+              console.log("Smooth fit error:", err);
+            }
+          }, 120);
+        }
 
       if (type === "displayAllTracks") {
         const tracks = Array.isArray(payload) ? payload : [];
+        setHistoryPaths(tracks);
 
-        const smoothened = tracks.map((track: Coord[]) =>
-          track.length < 3 ? track : smoothPathChaikin(track, 2)
-        );
-
-        setAllHistoryTracks(smoothened);
-
-        const flat = smoothened.flat();
+        const flat = tracks.flat();
         if (flat.length >= 2) {
           try {
             cameraRef.current?.fitBounds(flat[0], flat[flat.length - 1], 120, 120);
           } catch {}
         }
       }
-      
+
+      if (type === "displayTodayTrack") {
+        const tracks = Array.isArray(payload) ? payload : [];
+        setTodayPaths(tracks);
+
+        const flat = tracks.flat();
+        if (flat.length >= 2) {
+          try {
+            cameraRef.current?.fitBounds(flat[0], flat[flat.length - 1], 100, 100);
+          } catch {}
+        }
+      }
+
       if (type === "setHistoryMode") {
         setViewMode("history");
       }
 
       if (type === "clear") {
-        setPath([]);
+        setHighlightedPath([]);
         setStart(null);
         setEnd(null);
-        setAllHistoryTracks([]);  
       }
 
       onMessage?.(msg);
@@ -276,6 +314,24 @@ const MapComponent: React.FC<Props> = ({ onMapReady, refForward, onMessage }) =>
     }
   }, [handleMsg, refForward]);
 
+// ripple animation loop (Google-like)
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(rippleAnim, {
+          toValue: 1,
+          duration: 1800,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(rippleAnim, {
+          toValue: 0,
+          duration: 0,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+  }, [rippleAnim]);
 
   // -------------📌 GPS Tracking — CLEAN & FIXED
 useEffect(() => {
@@ -283,8 +339,11 @@ useEffect(() => {
     (pos) => {
       const { latitude, longitude, speed } = pos.coords;
       const coord: Coord = [longitude, latitude];
+
+      // update UI position
       setCurrentCoord(coord);
 
+      // detect movement
       const last = lastCoordRef.current;
       const gpsSpeed = typeof speed === "number" ? speed : 0;
       const moving =
@@ -293,33 +352,24 @@ useEffect(() => {
       lastCoordRef.current = coord;
       setIsMoving(Boolean(moving));
 
+      // First GPS fix → center camera only once
       if (!firstFixDone.current) {
         firstFixDone.current = true;
 
         cameraRef.current?.setCamera({
           centerCoordinate: coord,
-          zoomLevel: 17,
-          animationDuration: 800,
+          zoomLevel: 17,   // ← your static zoom level
+          animationDuration: CAMERA_ANIM,
+          animationMode: "ease",
         });
 
-        return; 
+        return;
       }
-
-      if (viewMode === "live" && lastCoordRef.current) {
-        if (Date.now() - lastUpdate.current > 600) {
-          cameraRef.current?.setCamera({
-            centerCoordinate: coord,
-            animationDuration: 400,
-          });
-          lastUpdate.current = Date.now();
-        }
-      }
-
     },
 
     (err) => {
       console.warn("GPS Error:", err);
-      setCurrentCoord((prev) => prev || null); 
+      setCurrentCoord((prev) => prev || null);
     },
 
     {
@@ -330,39 +380,50 @@ useEffect(() => {
     }
   );
 
- 
   return () => {
     if (watchId.current !== null) Geolocation.clearWatch(watchId.current);
   };
-}, [viewMode]); 
-
+}, []);
+ 
 
   // -------------------Heading (Rotational)
   useEffect(() => {
-  let mounted = true;
+    let mounted = true;
 
-  const degree_update_rate = 1;
+    const degree_update_rate = 1;
 
-    CompassHeading.start(degree_update_rate, ({ heading }: { heading: number }) => {
-    if (!mounted) return;
-    setHeading(heading);
+      CompassHeading.start(degree_update_rate, ({ heading }: { heading: number }) => {
+      if (!mounted) return;
+      setHeading(heading);
 
-    if (isMoving && currentCoord) {
-      cameraRef.current?.setCamera({
-        centerCoordinate: currentCoord,
-        zoomLevel: zoom,
-        // bearing: heading,
-        animationDuration: 300,
-      });
-    }
-  });
+      if (isMoving && currentCoord) {
+        cameraRef.current?.setCamera({
+          centerCoordinate: currentCoord,
+          zoomLevel: zoom,
+          // bearing: heading,
+          animationDuration: CAMERA_ANIM,
+          animationMode: "ease",
+        });
+      }
+    });
 
-  return () => {
-    mounted = false;
-    CompassHeading.stop();
-  };
-}, [currentCoord, zoom, isMoving]);
+    return () => {
+      mounted = false;
+      CompassHeading.stop();
+    };
+  }, [currentCoord, zoom, isMoving]);
 
+  // -----------------Smooth zoom updates (no blinking)
+  useEffect(() => {
+    if (!cameraRef.current || !currentCoord) return;
+
+    cameraRef.current.setCamera({
+      centerCoordinate: currentCoord,
+      zoomLevel: zoom,
+      animationDuration: 500,
+      animationMode: "ease",
+    });
+  }, [zoom]);
 
   // -----------------Reset Bearing when stopped
   useEffect(() => {
@@ -371,7 +432,8 @@ useEffect(() => {
       centerCoordinate: currentCoord,
       zoomLevel: zoom,
       bearing: 0,
-      animationDuration: 400,
+      animationDuration: CAMERA_ANIM,
+      animationMode: "ease",
     });
   }, [isMoving, currentCoord, zoom]);
 
@@ -411,28 +473,19 @@ useEffect(() => {
     ).start();
   }, [pulse1, pulse2]);
 
-  const lineFeature: any =
-    path.length > 1
-      ? {
-          type: "Feature",
-          properties: {},
-          geometry: { type: "LineString", coordinates: path },
-        }
-      : null;
 
-  const smoothPath = React.useMemo(
-    () => (path.length < 3 ? path : smoothPathChaikin(path, 2)),
-    [path]
-  );
+    // smoothed live path for rendering (Chaikin)
+    const smoothLivePath = React.useMemo(
+      () => (livePath.length < 3 ? livePath : smoothPathChaikin(livePath, 2)),
+      [livePath]
+    );
 
-  const smoothLineFeature: any =
-    smoothPath.length > 1
-      ? {
-          type: "Feature",
-          properties: {},
-          geometry: { type: "LineString", coordinates: smoothPath },
-        }
-      : null;
+    // smoothed highlighted session path
+    const smoothHighlightedPath = React.useMemo(
+      () => (highlightedPath.length < 3 ? highlightedPath : smoothPathChaikin(highlightedPath, 2)),
+      [highlightedPath]
+    );
+
 
   const circleFeature: any = currentCoord
     ? {
@@ -442,21 +495,20 @@ useEffect(() => {
       }
     : null;
 
-    const handleRetainPress = () => {
-    setViewMode("live");
-    firstFixDone.current = true; 
-
-    const coord = currentCoord || start;
+   const handleRetainPress = () => {
+    const coord = currentCoord || start || end;
     if (!coord) return;
 
-    setZoom(17);
+    setViewMode("live");
+
     cameraRef.current?.setCamera({
       centerCoordinate: coord,
       zoomLevel: 17,
-      animationDuration: 500,
+      animationDuration: 200,
+      animationMode: "ease",
+      followUserLocation: true,
     });
   };
-
 
   const handleZoomIn = () => {
     setZoom((prev) => prev + 1);
@@ -478,77 +530,102 @@ useEffect(() => {
         logoEnabled={false}
         attributionEnabled={false}
         compassEnabled={true}
+        zoomEnabled={true}
+        scrollEnabled={true}
+        pitchEnabled={true}
+        rotateEnabled={true}
         onRegionWillChange={() => {}}
+        
+        onDidFinishRenderingMapFully={() => {
+        setHistoryPaths((p) => [...p]);
+        setTodayPaths((p) => [...p]);
+        setHighlightedPath((p) => [...p]);
+        setLivePath((p) => [...p]);
+        setStart((s) => (s ? [...s] : null));
+        setEnd((e) => (e ? [...e] : null));
+      }}
       >
         <MapLibreGL.Camera
         ref={cameraRef}
         centerCoordinate={currentCoord || undefined}
+        // followUserLocation={true}
+        // followZoomLevel={17}
       />
 
-
         {start && (
-          <MapLibreGL.PointAnnotation id="s" coordinate={start}>
-            <View style={[styles.marker, styles.startMarker]} />
-            <Image source={{ uri: START_PIN_ICON }} style={styles.startEndIcon} />
-          </MapLibreGL.PointAnnotation>
+          <MapLibreGL.MarkerView coordinate={start}>
+            <Image source={require("../assets/start.png")} style={{ width: 20, height: 20 }} />
+          </MapLibreGL.MarkerView>
         )}
 
         {end && (
-          <MapLibreGL.PointAnnotation id="e" coordinate={end}>
-            <View style={[styles.marker, styles.endMarker]} />
-            <Image source={{ uri: END_PIN_ICON }} style={styles.startEndIcon} />
-          </MapLibreGL.PointAnnotation>
+          <MapLibreGL.MarkerView coordinate={end}>
+            <Image source={require("../assets/stop.png")} style={{ width: 20, height: 20 }} />
+          </MapLibreGL.MarkerView>
         )}
+
 
         {currentCoord !== null && Array.isArray(currentCoord) && (
-          <MapLibreGL.PointAnnotation id="live" coordinate={currentCoord}>
-            <View style={styles.liveMarkerWrapper}>
+          <MapLibreGL.MarkerView coordinate={currentCoord}>
+            <View style={styles.googleMarkerContainer}>
               <Animated.View
-                style={[styles.pulseCircle, {
-                  transform: [{ scale: pulse1.interpolate({ inputRange: [0, 1], outputRange: [1, 2.4] }) }],
-                  opacity: pulse1.interpolate({ inputRange: [0, 1], outputRange: [0.7, 0] }),
-                }]}
+                style={[
+                  styles.ripple,
+                  {
+                    transform: [
+                      {
+                        scale: pulse1.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [1, 3],
+                        }),
+                      },
+                    ],
+                    opacity: pulse1.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0.6, 0],
+                    }),
+                  },
+                ]}
               />
-              <Animated.View
-                style={[styles.pulseCircle, {
-                  transform: [{ scale: pulse2.interpolate({ inputRange: [0, 1], outputRange: [1, 2.8] }) }],
-                  opacity: pulse2.interpolate({ inputRange: [0, 1], outputRange: [0.6, 0] }),
-                }]}
-              />
-
-              <View style={styles.directionArrow} />
               {_heading !== null && (
                 <View
-                  style={[styles.directionArrow, styles.directionArrowOverlay, { transform: [{ rotate: `${_heading}deg` }] }]}
+                  style={[
+                    styles.headingCone,
+                    { transform: [{ rotate: `${_heading}deg` }] },
+                  ]}
                 />
               )}
-
-              <View style={styles.liveMarkerOuter}>
-                <View style={styles.liveMarkerInner} />
+              <View style={styles.googleDotOuter}>
+                <View style={styles.googleDotInner} />
               </View>
             </View>
-          </MapLibreGL.PointAnnotation>
+          </MapLibreGL.MarkerView>
         )}
 
-        {circleFeature && (
-          <MapLibreGL.ShapeSource id="liveCircle" shape={circleFeature}>
-            <MapLibreGL.FillLayer
-              id="liveCircleFill"
-              style={{
-                fillColor: "rgba(33,174,230,0.25)",
-                fillOutlineColor: "rgba(33,174,230,0.8)",
-              }}
-            />
-          </MapLibreGL.ShapeSource>
-        )}
+      {viewMode === "live" && circleFeature && (
+        <MapLibreGL.ShapeSource id="liveCircle" shape={circleFeature}>
+          <MapLibreGL.FillLayer
+            id="liveCircleFill"
+            style={{
+              fillColor: "rgba(33,174,230,0.25)",
+              fillOutlineColor: "rgba(33,174,230,0.8)",
+            }}
+          />
+        </MapLibreGL.ShapeSource>
+      )}
 
-        {lineFeature && (
-          <MapLibreGL.ShapeSource id="path" shape={lineFeature}>
+
+        {smoothLivePath.length > 1 && (
+          <MapLibreGL.ShapeSource id="live-track" shape={{
+            type: "Feature",
+            properties: {},
+            geometry: { type: "LineString", coordinates: smoothLivePath }
+          }}>
             <MapLibreGL.LineLayer
-              id="pathLine"
+              id="live-track-line"
               style={{
-                lineColor: "#33BBFF",
-                lineWidth: 5,
+                lineColor: "#33BBFF", 
+                lineWidth: 3,
                 lineJoin: "round",
                 lineCap: "round",
               }}
@@ -556,41 +633,21 @@ useEffect(() => {
           </MapLibreGL.ShapeSource>
         )}
 
-        {smoothLineFeature && (
-          <MapLibreGL.ShapeSource id="pathSmooth" shape={smoothLineFeature}>
-            <MapLibreGL.LineLayer
-              id="pathLineSmooth"
-              style={{
-                lineColor: "#0051FF",
-                lineWidth: 4,
-                lineJoin: "round",
-                lineCap: "round",
-              }}
-            />
-          </MapLibreGL.ShapeSource>
-        )}
-        {allHistoryTracks.map((trk, index) => {
+
+        {historyPaths.map((trk, index) => {
             if (!Array.isArray(trk) || trk.length < 2) return null;
-
             const feature = {
               type: "Feature",
               properties: {},
-              geometry: {
-                type: "LineString",
-                coordinates: trk
-              }
-            } as GeoJSON.Feature; // 👈 add this cast
+              geometry: { type: "LineString", coordinates: trk },
+            } as GeoJSON.Feature;
 
             return (
-              <MapLibreGL.ShapeSource
-                key={`hist-${index}`}
-                id={`hist-${index}`}
-                shape={feature}
-              >
+              <MapLibreGL.ShapeSource key={`hist-${index}`} id={`hist-${index}`} shape={feature}>
                 <MapLibreGL.LineLayer
                   id={`hist-layer-${index}`}
                   style={{
-                    lineColor: "#00C853",
+                    lineColor: "#00C853", 
                     lineWidth: 3,
                     lineJoin: "round",
                     lineCap: "round",
@@ -599,6 +656,57 @@ useEffect(() => {
               </MapLibreGL.ShapeSource>
             );
           })}
+        
+        {todayPaths.map((trk, index) => {
+          if (!Array.isArray(trk) || trk.length < 2) return null;
+
+          const feature = {
+            type: "Feature" as const,
+            properties: {},
+            geometry: {
+              type: "LineString" as const,
+              coordinates: trk,
+            },
+          };
+
+          return (
+            <MapLibreGL.ShapeSource
+              key={`today-${index}`}
+              id={`today-${index}`}
+              shape={feature}
+            >
+              <MapLibreGL.LineLayer
+                id={`today-layer-${index}`}
+                style={{
+                  lineColor: "#9e9e9e", // grey color
+                  lineWidth: 4,
+                  lineJoin: "round",
+                  lineCap: "round",
+                }}
+              />
+            </MapLibreGL.ShapeSource>
+          );
+        })}
+
+
+        {smoothHighlightedPath.length > 1 && (
+          <MapLibreGL.ShapeSource id="highlight-track" shape={{
+            type: "Feature",
+            properties: {},
+            geometry: { type: "LineString", coordinates: smoothHighlightedPath }
+          }}>
+            <MapLibreGL.LineLayer
+              id="highlight-track-line"
+              style={{
+                lineColor: "#0051FF", 
+                lineWidth: 5,
+                lineJoin: "round",
+                lineCap: "round",
+              }}
+            />
+          </MapLibreGL.ShapeSource>
+        )}
+
       </MapLibreGL.MapView>
 
   
@@ -681,7 +789,7 @@ useEffect(() => {
       <Animated.View style={[styles.retainWrapper, { transform: [{ scale: retainScale }] }]}>
         <TouchableOpacity
           activeOpacity={0.85}
-          onPressIn={() => animateRetain(0.96)}
+          onPressIn={() => animateRetain(0.8)}
           onPressOut={() => animateRetain(1)}
           onPress={handleRetainPress}
           style={[styles.retainButton, borderTheme]}
@@ -801,6 +909,58 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   liveMarkerInner: { width: 10, height: 10, borderRadius: 5, backgroundColor: "#007bff" },
+
+    googleMarkerContainer: {
+    width: 54,
+    height: 54,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  ripple: {
+    position: "absolute",
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "#4285F4",
+  },
+
+  headingCone: {
+    position: "absolute",
+    top: -18,
+    width: 0,
+    height: 0,
+    borderLeftWidth: 10,
+    borderRightWidth: 10,
+    borderBottomWidth: 24,
+    borderLeftColor: "transparent",
+    borderRightColor: "transparent",
+    borderBottomColor: "rgba(66,133,244,0.65)",
+    opacity: 0.95,
+  },
+
+  googleDotOuter: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "#4285F4",
+    borderWidth: 3,
+    borderColor: "#FFFFFF",
+    shadowColor: "#4285F4",
+    shadowOpacity: 0.6,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 10,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  googleDotInner: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: "#1A73E8",
+  },
 
   startEndIcon: { width: 32, height: 32, resizeMode: "contain", marginTop: -10 },
 
