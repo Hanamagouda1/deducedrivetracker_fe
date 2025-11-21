@@ -139,6 +139,7 @@ const MapComponent: React.FC<Props> = ({ onMapReady, refForward, onMessage }) =>
 
   const [_heading, setHeading] = useState<number | null>(null);
   const [viewMode, setViewMode] = useState<"live" | "history">("live");
+  const [isFollowing, setIsFollowing] = useState(true);
 
   const [showMenu, setShowMenu] = useState(false);
   const slideAnim = useRef(new Animated.Value(0)).current;
@@ -334,56 +335,64 @@ const MapComponent: React.FC<Props> = ({ onMapReady, refForward, onMessage }) =>
   }, [rippleAnim]);
 
   // -------------📌 GPS Tracking — CLEAN & FIXED
-useEffect(() => {
-  watchId.current = Geolocation.watchPosition(
-    (pos) => {
-      const { latitude, longitude, speed } = pos.coords;
-      const coord: Coord = [longitude, latitude];
+  useEffect(() => {
+    watchId.current = Geolocation.watchPosition(
+      (pos) => {
+        const { latitude, longitude, speed } = pos.coords;
+        const coord: Coord = [longitude, latitude];
 
-      // update UI position
-      setCurrentCoord(coord);
 
-      // detect movement
-      const last = lastCoordRef.current;
-      const gpsSpeed = typeof speed === "number" ? speed : 0;
-      const moving =
-        gpsSpeed > 1 || (last && distanceBetween(last, coord) > 3);
+        setCurrentCoord(coord);
 
-      lastCoordRef.current = coord;
-      setIsMoving(Boolean(moving));
+        const last = lastCoordRef.current;
+        const gpsSpeed = typeof speed === "number" ? speed : 0;
+        const moving =
+          gpsSpeed > 1 || (last && distanceBetween(last, coord) > 3);
 
-      // First GPS fix → center camera only once
-      if (!firstFixDone.current) {
-        firstFixDone.current = true;
+        lastCoordRef.current = coord;
+        setIsMoving(Boolean(moving));
 
-        cameraRef.current?.setCamera({
-          centerCoordinate: coord,
-          zoomLevel: 17,   // ← your static zoom level
-          animationDuration: CAMERA_ANIM,
-          animationMode: "ease",
-        });
+        if (!firstFixDone.current) {
+          firstFixDone.current = true;
+          setIsFollowing(true); 
 
-        return;
+          cameraRef.current?.setCamera({
+            centerCoordinate: coord,
+            zoomLevel: 17,
+            animationDuration: CAMERA_ANIM,
+            animationMode: "ease",
+          });
+
+          return;
+        }
+
+        // After first fix → center only when following
+        if (isFollowing) {
+          cameraRef.current?.setCamera({
+            centerCoordinate: coord,
+            animationDuration: 150,
+            animationMode: "ease",
+          });
+        }
+      },
+
+      (err) => {
+        console.warn("GPS Error:", err);
+        setCurrentCoord((prev) => prev || null);
+      },
+
+      {
+        enableHighAccuracy: true,
+        distanceFilter: 1,
+        interval: 1500,
+        fastestInterval: 800,
       }
-    },
+    );
 
-    (err) => {
-      console.warn("GPS Error:", err);
-      setCurrentCoord((prev) => prev || null);
-    },
-
-    {
-      enableHighAccuracy: true,
-      distanceFilter: 1,
-      interval: 1500,
-      fastestInterval: 800,
-    }
-  );
-
-  return () => {
-    if (watchId.current !== null) Geolocation.clearWatch(watchId.current);
-  };
-}, []);
+    return () => {
+      if (watchId.current !== null) Geolocation.clearWatch(watchId.current);
+    };
+  }, []);
  
 
   // -------------------Heading (Rotational)
@@ -534,8 +543,9 @@ useEffect(() => {
         scrollEnabled={true}
         pitchEnabled={true}
         rotateEnabled={true}
-        onRegionWillChange={() => {}}
-        
+        onRegionWillChange={() => {
+          setIsFollowing(false);  
+        }}            
         onDidFinishRenderingMapFully={() => {
         setHistoryPaths((p) => [...p]);
         setTodayPaths((p) => [...p]);
@@ -554,13 +564,13 @@ useEffect(() => {
 
         {start && (
           <MapLibreGL.MarkerView coordinate={start}>
-            <Image source={require("../assets/start.png")} style={{ width: 20, height: 20 }} />
+            <Image source={require("../assets/start.png")} style={{ width: 50, height: 50 }} />
           </MapLibreGL.MarkerView>
         )}
 
         {end && (
           <MapLibreGL.MarkerView coordinate={end}>
-            <Image source={require("../assets/stop.png")} style={{ width: 20, height: 20 }} />
+            <Image source={require("../assets/stop.png")} style={{ width: 50, height: 50 }} />
           </MapLibreGL.MarkerView>
         )}
 
