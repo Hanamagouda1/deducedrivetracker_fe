@@ -26,7 +26,11 @@ type Props = {
   show: boolean;
   onSelectSession: (id: number, mode?: string) => void;
   showToast?: (m: string, t?: "info" | "success" | "error") => void;
+  date: Date;              
+  setDate: (d: Date) => void; 
+  fetchSessionsRef?: any;
 };
+
 
 const EmptySessions = () => (
   <Text style={{ color: "#888", textAlign: "center", marginTop: 10, fontSize: 14 }}>
@@ -37,13 +41,11 @@ const EmptySessions = () => (
 const formatTime = (ts?: string) => {
   if (!ts) return "--";
 
-  // Supports both "YYYY-MM-DD HH:MM:SS" and "YYYY-MM-DDTHH:MM:SS"
-  const clean = ts.replace("T", " "); // convert T → space
-
+  const clean = ts.replace("T", " "); 
   const parts = clean.split(" ");
   if (parts.length < 2) return "--";
 
-  const timePart = parts[1]; // "HH:MM:SS"
+  const timePart = parts[1]; 
   const [hrStr, minStr] = timePart.split(":");
   let hr = Number(hrStr);
   const min = minStr;
@@ -118,9 +120,9 @@ const DriveHistoryItem = ({
 };
 
 /* MAIN COMPONENT */
-const DriveHistoryList: React.FC<Props> = ({ apiBase, show, onSelectSession, showToast }) => {
-  const [date, setDate] = useState(new Date());
-  const [tempDate, setTempDate] = useState(new Date());   // ← store temporary selection
+const DriveHistoryList: React.FC<Props> = ({ apiBase, show, onSelectSession, showToast,date,setDate}) => {
+  // const [date, setDate] = useState(new Date());
+  const [tempDate, setTempDate] = useState(new Date());   
   const [showPicker, setShowPicker] = useState(false);
 
   const [loading, setLoading] = useState(false);
@@ -152,7 +154,6 @@ const DriveHistoryList: React.FC<Props> = ({ apiBase, show, onSelectSession, sho
 
         setSessions(sessionsData);
       } catch (err) {
-        console.error("Fetch Sessions error:", err);
         showToast?.("Failed to load sessions", "error");
         setSessions([]);
       } finally {
@@ -164,17 +165,17 @@ const DriveHistoryList: React.FC<Props> = ({ apiBase, show, onSelectSession, sho
 
   /** Load when menu opens */
   useEffect(() => {
-    if (show) fetchSessions(date);
-  }, [show, date, fetchSessions]);
+    if (show) fetchSessions(date);   
+  }, [show]);
 
   return (
     <View style={{ padding: 12, width: "100%" }}>
       
-      {/* 📅 SELECT DATE + 🔄 REFRESH BUTTON */}
+      {/* 📅 SELECT DATE*/}
       <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
         <TouchableOpacity
           onPress={() => {
-            setTempDate(date);     // keep original date in case of cancel
+            setTempDate(date);     
             setShowPicker(true);
           }}
           style={{
@@ -214,6 +215,7 @@ const DriveHistoryList: React.FC<Props> = ({ apiBase, show, onSelectSession, sho
           />
         </TouchableOpacity>
 
+        {/* 🔄 Clear selection button */}
         <TouchableOpacity
           onPress={() => onSelectSession(-1, "clear")}
           style={{
@@ -234,20 +236,18 @@ const DriveHistoryList: React.FC<Props> = ({ apiBase, show, onSelectSession, sho
           value={tempDate}
           mode="date"
           display={Platform.OS === "ios" ? "spinner" : "default"}
-          onChange={(event, selected) => {
-            if (event.type === "dismissed") {
-              // ❌ Cancel → keep original date
-              setShowPicker(false);
-              return;
-            }
+         onChange={(event, selected) => {
+          if (event.type === "dismissed") {
+            setShowPicker(false);
+            return;
+          }
 
-            // ✔ User pressed OK
-            if (selected) {
-              setShowPicker(false);
-              setDate(selected);        // update date
-              fetchSessions(selected);  // fetch new data
-            }
-          }}
+          if (selected) {
+            setShowPicker(false);
+            setDate(selected);       
+            fetchSessions(selected);  
+          }
+        }}
         />
       )}
 

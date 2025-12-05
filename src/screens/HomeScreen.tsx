@@ -81,6 +81,7 @@ const HomeScreen: React.FC = () => {
 
   const [todayKm, setTodayKm] = useState("0.0");
   const [totalKm, setTotalKm] = useState("0.0");
+  const [driveDate, setDriveDate] = useState(new Date());
 
   const webRef = useRef<any>(null);
   const [currentSessionId, setCurrentSessionId] = useState<number | null>(null);
@@ -255,6 +256,9 @@ const HomeScreen: React.FC = () => {
         if (mode === "clear") {
           postToMap({ type: "clear" });
           showToast("Cleared", "info");
+
+          const today = new Date();
+          setDriveDate(today);
           return;
         }
 
@@ -630,11 +634,12 @@ const HomeScreen: React.FC = () => {
           <DriveHistoryList
             apiBase={API_BASE}
             show={menuVisible}
+            date={driveDate}         
+            setDate={setDriveDate}
             onSelectSession={(id, mode) => {
               setMenuVisible(false);       
               handleSelectSession(id, mode);
             }}
-
             showToast={(m, t) => showToast(m, t)}
           />
         </Animated.View>

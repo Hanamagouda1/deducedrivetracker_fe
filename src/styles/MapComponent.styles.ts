@@ -115,35 +115,35 @@ export default StyleSheet.create({
 
   headingCone: {
     position: "absolute",
-    top: -18,
     width: 0,
     height: 0,
-    borderLeftWidth: 10,
-    borderRightWidth: 10,
-    borderBottomWidth: 24,
+    borderLeftWidth: 14,
+    borderRightWidth: 14,
+    borderBottomWidth: 32,
     borderLeftColor: "transparent",
     borderRightColor: "transparent",
-    borderBottomColor: "rgba(66,133,244,0.65)",
-    opacity: 0.95,
-    zIndex: 999, 
+    borderBottomColor: "#4285F4",    // full opacity
+    opacity: 1,
+    zIndex: 1,                       // cone behind pointer
   },
 
   googleDotOuter: {
-    width: 18,
-    height: 18,
-    borderRadius: 12,
-    backgroundColor: "#4285F4",
-    borderWidth: 2,
-    borderColor: "#FFFFFF",
-    shadowColor: "#4285F4",
-    shadowOpacity: 0.6,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 0 },
-    elevation: 10,
-    justifyContent: "center",
-    alignItems: "center",
-    zIndex: 5,  
-  },
+  width: 20,
+  height: 20,
+  borderRadius: 12,
+  backgroundColor: "#4285F4",
+  borderWidth: 2,
+  borderColor: "#FFFFFF",
+  shadowColor: "#4285F4",
+  shadowOpacity: 0.6,
+  shadowRadius: 8,
+  shadowOffset: { width: 0, height: 0 },
+  elevation: 10,
+  justifyContent: "center",
+  alignItems: "center",
+  zIndex: 5,       // ABOVE cone
+},
+
 
   googleDotInner: {
     width: 12,
