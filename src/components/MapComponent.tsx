@@ -135,7 +135,7 @@ const MapComponent: React.FC<Props> = ({ onMapReady, refForward, onMessage }) =>
   const [start, setStart] = useState<Coord | null>(null);
   const [end, setEnd] = useState<Coord | null>(null);
   const [currentCoord, setCurrentCoord] = useState<Coord | null>(null);
-  const [zoom, setZoom] = useState<number>(15);
+  const [zoom, setZoom] = useState<number>(17);
   const watchId = useRef<number | null>(null);
   const { toast, showToast} = useToast();
   const [_heading, setHeading] = useState<number | null>(null);
@@ -240,60 +240,6 @@ const MapComponent: React.FC<Props> = ({ onMapReady, refForward, onMessage }) =>
     [livePath]
   );
 
-// -------------------Ripple animation pointer-----------
-  // useEffect(() => {
-  //   Animated.loop(
-  //     Animated.sequence([
-  //       Animated.timing(rippleAnim, {
-  //         toValue: 1,
-  //         duration: 1800,
-  //         easing: Easing.out(Easing.quad),
-  //         useNativeDriver: true,
-  //       }),
-  //       Animated.timing(rippleAnim, {
-  //         toValue: 0,
-  //         duration: 0,
-  //         useNativeDriver: true,
-  //       }),
-  //     ])
-  //   ).start();
-  // }, [rippleAnim]);
-
-  // -----------Pulse Animation--------------
-  // useEffect(() => {
-  //   Animated.loop(
-  //     Animated.sequence([
-  //       Animated.timing(pulse1, {
-  //         toValue: 1,
-  //         duration: 1600,
-  //         easing: Easing.out(Easing.ease),
-  //         useNativeDriver: true,
-  //       }),
-  //       Animated.timing(pulse1, {
-  //         toValue: 0,
-  //         duration: 0,
-  //         useNativeDriver: true,
-  //       }),
-  //     ])
-  //   ).start();
-
-  //   Animated.loop(
-  //     Animated.sequence([
-  //       Animated.delay(400),
-  //       Animated.timing(pulse2, {
-  //         toValue: 1,
-  //         duration: 1600,
-  //         easing: Easing.out(Easing.ease),
-  //         useNativeDriver: true,
-  //       }),
-  //       Animated.timing(pulse2, {
-  //         toValue: 0,
-  //         duration: 0,
-  //         useNativeDriver: true,
-  //       }),
-  //     ])
-  //   ).start();
-  // }, [pulse1, pulse2]);
 
 // -----------------circleFeature-------------
   const circleFeature: any = currentCoord
@@ -404,7 +350,7 @@ const MapComponent: React.FC<Props> = ({ onMapReady, refForward, onMessage }) =>
 
         cameraRef.current?.setCamera({
           centerCoordinate: pt,
-          zoomLevel: zoom,
+          zoomLevel: 17,
           animationDuration: CAMERA_ANIM,
           animationMode: "easeTo",
         });
@@ -429,7 +375,7 @@ const MapComponent: React.FC<Props> = ({ onMapReady, refForward, onMessage }) =>
 
         cameraRef.current?.setCamera({
           centerCoordinate: pt,
-          zoomLevel: zoom,
+          zoomLevel: 17,
           animationDuration: CAMERA_ANIM,
           animationMode: "easeTo",
         });
@@ -531,12 +477,11 @@ const MapComponent: React.FC<Props> = ({ onMapReady, refForward, onMessage }) =>
     if (isMoving || !currentCoord) return;
 
     cameraRef.current?.setCamera({
-      zoomLevel: zoom,
       bearing: 0,
       animationDuration: CAMERA_ANIM,
       animationMode: "easeTo",
     });
-  }, [isMoving, currentCoord, zoom]);
+  }, [isMoving, currentCoord]);
 
 
   return (
@@ -581,99 +526,7 @@ const MapComponent: React.FC<Props> = ({ onMapReady, refForward, onMessage }) =>
         </MapLibreGL.MarkerView>
       )}
 
-      {/* LIVE POINTER*/}
-      {/* {currentCoord !== null && Array.isArray(currentCoord) && (
-        <MapLibreGL.MarkerView coordinate={currentCoord}>
-          <View style={styles.googleMarkerContainer}>
-            <Animated.View
-              style={[
-                styles.ripple,
-                {
-                  transform: [
-                    {
-                      scale: pulse1.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [1, 3],
-                      }),
-                    },
-                  ],
-                  opacity: pulse1.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [0.6, 0],
-                  }),
-                },
-              ]}
-            />
-            {_heading !== null && (
-              <View
-                style={[
-                  styles.headingCone,
-                  { transform: [{ rotate: `${_heading}deg` }] },
-                ]}
-              />
-            )}
-            <View style={styles.googleDotOuter}>
-              <View style={styles.googleDotInner} />
-            </View>
-          </View>
-        </MapLibreGL.MarkerView>
-      )} */}
-      {currentCoord !== null && Array.isArray(currentCoord) && (
-        <MapLibreGL.ShapeSource
-          id="gps-dot-src"
-          shape={{
-            type: "Feature",
-            properties: {},
-            geometry: {
-              type: "Point",
-              coordinates: currentCoord,
-            },
-          }}
-        >
-          <MapLibreGL.CircleLayer
-            id="gps-dot"
-            style={{
-              circleRadius: 8,          
-              circleColor: "#4285F4",      
-              circleStrokeWidth: 2,        
-              circleStrokeColor: "#FFFFFF",
-              circleOpacity: 1,
-            }}
-          />
-        </MapLibreGL.ShapeSource>
-      )}
-
-      {circleFeature && (
-        <MapLibreGL.ShapeSource id="liveCircle" shape={circleFeature}>
-          <MapLibreGL.FillLayer
-            id="liveCircleFill"
-            style={{
-              fillColor: "rgba(33,174,230,0.25)",
-              fillOutlineColor: "rgba(33,174,230,0.8)",
-            }}
-          />
-        </MapLibreGL.ShapeSource>
-      )}
-
       {/* LINES */}
-      {smoothLivePath.length > 1 && (
-        <MapLibreGL.ShapeSource id="live-track" shape={{
-          type: "Feature",
-          properties: {},
-          geometry: { type: "LineString", coordinates: smoothLivePath }
-        }}>
-          <MapLibreGL.LineLayer
-            id="live-track-line"
-            style={{
-              lineColor: "#33BBFF", 
-              lineWidth: 3,
-              lineJoin: "round",
-              lineCap: "round",
-            }}
-          />
-        </MapLibreGL.ShapeSource>
-      )}
-
       {historyPaths.map((trk, index) => {
           if (!Array.isArray(trk) || trk.length < 2) return null;
           const feature = {
@@ -688,16 +541,17 @@ const MapComponent: React.FC<Props> = ({ onMapReady, refForward, onMessage }) =>
                 id={`hist-layer-${index}`}
                 style={{
                   lineColor: "#00C853", 
-                  lineWidth: 4,
+                  lineWidth: 5,
                   lineJoin: "round",
                   lineCap: "round",
+                  lineSortKey: 1
                 }}
               />
             </MapLibreGL.ShapeSource>
           );
         })}
-        
-      {todayPaths.map((trk, index) => {
+
+        {todayPaths.map((trk, index) => {
         if (!Array.isArray(trk) || trk.length < 2) return null;
         const feature = {
           type: "Feature" as const,
@@ -721,6 +575,7 @@ const MapComponent: React.FC<Props> = ({ onMapReady, refForward, onMessage }) =>
                 lineWidth: 4,
                 lineJoin: "round",
                 lineCap: "round",
+                lineSortKey: 2
               }}
             />
           </MapLibreGL.ShapeSource>
@@ -741,6 +596,65 @@ const MapComponent: React.FC<Props> = ({ onMapReady, refForward, onMessage }) =>
               lineWidth: 6,
               lineJoin: "round",
               lineCap: "round",
+              lineSortKey: 3
+            }}
+          />
+        </MapLibreGL.ShapeSource>
+      )}
+
+      {smoothLivePath.length > 1 && (
+        <MapLibreGL.ShapeSource id="live-track" shape={{
+          type: "Feature",
+          properties: {},
+          geometry: { type: "LineString", coordinates: smoothLivePath }
+        }}>
+          <MapLibreGL.LineLayer
+            id="live-track-line"
+            style={{
+              lineColor: "#33BBFF", 
+              lineWidth: 3,
+              lineJoin: "round",
+              lineCap: "round",
+              lineSortKey: 4
+            }}
+          />
+        </MapLibreGL.ShapeSource>
+      )}
+
+      {/* LIVE POINTER*/}
+       {circleFeature && (
+        <MapLibreGL.ShapeSource id="liveCircle" shape={circleFeature}>
+          <MapLibreGL.FillLayer
+            id="liveCircleFill"
+            style={{
+              fillColor: "rgba(33,174,230,0.25)",
+              fillOutlineColor: "rgba(33,174,230,0.8)",
+            }}
+          />
+        </MapLibreGL.ShapeSource>
+      )}
+
+      {currentCoord !== null && Array.isArray(currentCoord) && (
+        <MapLibreGL.ShapeSource
+          id="gps-dot-src"
+          shape={{
+            type: "Feature",
+            properties: {},
+            geometry: {
+              type: "Point",
+              coordinates: currentCoord,
+            },
+          }}
+        >
+          <MapLibreGL.CircleLayer
+            id="gps-dot"
+            style={{
+              circleRadius: 8,          
+              circleColor: "#4285F4",      
+              circleStrokeWidth: 2,        
+              circleStrokeColor: "#FFFFFF",
+              circleOpacity: 1,
+              circleSortKey: 9999
             }}
           />
         </MapLibreGL.ShapeSource>

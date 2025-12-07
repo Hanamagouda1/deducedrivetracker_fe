@@ -95,64 +95,6 @@ export default StyleSheet.create({
     resizeMode: "contain",
   },
 
-  /* ------------------- GOOGLE LIVE LOCATION MARKER ------------------- */
-  googleMarkerContainer: {
-    width: 54,
-    height: 54,
-    justifyContent: "center",
-    alignItems: "center",
-    overflow: "visible",
-  },
-
-  ripple: {
-    position: "absolute",
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: "#4285F4",
-    zIndex: 1,
-  },
-
-  headingCone: {
-    position: "absolute",
-    width: 0,
-    height: 0,
-    borderLeftWidth: 14,
-    borderRightWidth: 14,
-    borderBottomWidth: 32,
-    borderLeftColor: "transparent",
-    borderRightColor: "transparent",
-    borderBottomColor: "#4285F4",    // full opacity
-    opacity: 1,
-    zIndex: 1,                       // cone behind pointer
-  },
-
-  googleDotOuter: {
-  width: 20,
-  height: 20,
-  borderRadius: 12,
-  backgroundColor: "#4285F4",
-  borderWidth: 2,
-  borderColor: "#FFFFFF",
-  shadowColor: "#4285F4",
-  shadowOpacity: 0.6,
-  shadowRadius: 8,
-  shadowOffset: { width: 0, height: 0 },
-  elevation: 10,
-  justifyContent: "center",
-  alignItems: "center",
-  zIndex: 5,       // ABOVE cone
-},
-
-
-  googleDotInner: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: "#1A73E8",
-    zIndex: 6,
-  },
-
   /* ------------------- ZOOM BUTTONS ------------------- */
   zoomContainer: {
     position: "absolute",
