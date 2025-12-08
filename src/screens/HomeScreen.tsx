@@ -13,7 +13,6 @@ import {
   PermissionsAndroid,
   BackHandler,
 } from "react-native";
-// import MapViewComponent from "../components/MapViewComponent";
 import MapComponent from "../components/MapComponent";
 import DriveHistoryList from "../components/DriveHistoryList";
 import PlotModal from "../components/PlotModal";
@@ -21,7 +20,6 @@ import ToastComponent from "../components/ToastComponent";
 import useToast from "../utils/useToast";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { CommonActions, useNavigation } from "@react-navigation/native";
-// import { calculateDistance } from "../utils/distance";
 import Geolocation from "@react-native-community/geolocation";
 import axios from "axios";
 import styles from "../styles/HomeScreen.styles";
@@ -30,13 +28,56 @@ const API_BASE = "https://deduce-drive-tracker-be.onrender.com";
 
 const HomeScreen: React.FC = () => {
   const navigation = useNavigation();
-
-  /** Toast */
   const { toast, showToast, fadeAnim } = useToast();
-
-  /** THEME */
   const [isDarkMode, setIsDarkMode] = useState(false);
+  const [menuVisible, setMenuVisible] = useState(false);
+  const [menuAnim] = useState(() => new Animated.Value(0));
+  const [userInfo, setUserInfo] = useState<any>(null);
+  const [tracking, setTracking] = useState(false);
+  const watchIdRef = useRef<number | null>(null);
+  const [isMapReady, setIsMapReady] = useState(false);
+  const [currentDriveTrack, setCurrentDriveTrack] = useState<any[]>([]);
+  const [driveStopped, setDriveStopped] = useState(false);
+  const [stopFailed, setStopFailed] = useState(false);
+  const [plotModalVisible, setPlotModalVisible] = useState(false);
+  const [ploting, _setPloting] = useState(false);
+  const [isPlotted, setIsPlotted] = useState(false);
+  const [logoutModalVisible, setLogoutModalVisible] = useState(false);
+  const [todayKm, setTodayKm] = useState("0.0");
+  const [totalKm, setTotalKm] = useState("0.0");
+  const [driveDate, setDriveDate] = useState(new Date());
+  const webRef = useRef<any>(null);
+  const [currentSessionId, setCurrentSessionId] = useState<number | null>(null);
+  const sessionRef = useRef<number | null>(null);
 
+
+/** -----------LOCATION PERMISSION--------------- */
+  const requestLocationPermission = useCallback(async () => {
+    if (Platform.OS === "android") {
+      const granted = await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
+      );
+      return granted === PermissionsAndroid.RESULTS.GRANTED;
+    }
+    return true;
+  }, []);
+
+  /** --------------ANDROID BACK BUTTON---------- */
+    useEffect(() => {
+      const backAction = () => {
+        BackHandler.exitApp();
+        return true;
+      };
+
+      const handler = BackHandler.addEventListener(
+        "hardwareBackPress",
+        backAction
+      );
+
+      return () => handler.remove();
+    }, []);
+
+  /** --------------DARKMODE---------- */
   const theme = isDarkMode
     ? {
         background: "#121212",
@@ -60,34 +101,9 @@ const HomeScreen: React.FC = () => {
         buttonStop: "#DC3545",
         border: "rgba(0,0,0,0.1)",
       };
+  /** ----------- MAP READY ---------- */
+  const onMapReady = useCallback(() => setIsMapReady(true), []);
 
-  /** STATES */
-  const [menuVisible, setMenuVisible] = useState(false);
-  const [menuAnim] = useState(() => new Animated.Value(0));
-  const [userInfo, setUserInfo] = useState<any>(null);
-
-  const [tracking, setTracking] = useState(false);
-  const watchIdRef = useRef<number | null>(null);
-  const [isMapReady, setIsMapReady] = useState(false);
-
-  const [currentDriveTrack, setCurrentDriveTrack] = useState<any[]>([]);
-  const [driveStopped, setDriveStopped] = useState(false);
-  const [stopFailed, setStopFailed] = useState(false);
-
-  const [plotModalVisible, setPlotModalVisible] = useState(false);
-  const [ploting, _setPloting] = useState(false);
-  const [isPlotted, setIsPlotted] = useState(false);
-  const [logoutModalVisible, setLogoutModalVisible] = useState(false);
-
-  const [todayKm, setTodayKm] = useState("0.0");
-  const [totalKm, setTotalKm] = useState("0.0");
-  const [driveDate, setDriveDate] = useState(new Date());
-
-  const webRef = useRef<any>(null);
-  const [currentSessionId, setCurrentSessionId] = useState<number | null>(null);
-  const sessionRef = useRef<number | null>(null);
-
-  /** Send data to Map */
   const postToMap = useCallback(
     (obj: any) => {
       if (webRef.current && isMapReady)
@@ -129,22 +145,8 @@ const HomeScreen: React.FC = () => {
     loadUser();
   }, [navigation, showToast]);
 
-  /** --------------ANDROID BACK BUTTON---------- */
-  useEffect(() => {
-    const backAction = () => {
-      BackHandler.exitApp();
-      return true;
-    };
 
-    const handler = BackHandler.addEventListener(
-      "hardwareBackPress",
-      backAction
-    );
-
-    return () => handler.remove();
-  }, []);
-
-  /** MENU */
+  /** --------------TOGGLE MENU---------- */
   const toggleMenu = () => {
     setMenuVisible((prev) => !prev);
     Animated.timing(menuAnim, {
@@ -154,8 +156,6 @@ const HomeScreen: React.FC = () => {
     }).start();
   };
 
-  /** ----------- MAP READY ---------- */
-  const onMapReady = useCallback(() => setIsMapReady(true), []);
 
   /** -------- DRIVE STATISTICS ---------- */
   const fetchStats = useCallback(async () => {
@@ -303,18 +303,6 @@ const HomeScreen: React.FC = () => {
   );
 
 
-/** -----------LOCATION PERMISSION--------------- */
-  const requestLocationPermission = useCallback(async () => {
-    if (Platform.OS === "android") {
-      const granted = await PermissionsAndroid.request(
-        PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
-      );
-      return granted === PermissionsAndroid.RESULTS.GRANTED;
-    }
-    return true;
-  }, []);
-
-
 /** --------------START TRACKING-------------- */
   const startTracking = useCallback(async () => {
     if (tracking) return;
@@ -432,16 +420,13 @@ const HomeScreen: React.FC = () => {
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
-    // ⭐ GET FINAL COORDINATE BEFORE STOP
-        const last = currentDriveTrack[currentDriveTrack.length - 1];
-        if (last) {
-          postToMap({
-            type: "stopLive",
-            payload: { lat: last.lat, lng: last.lng }
-          });
-        }
-
-      // Stop success
+    const last = currentDriveTrack[currentDriveTrack.length - 1];
+    if (last) {
+      postToMap({
+        type: "stopLive",
+        payload: { lat: last.lat, lng: last.lng }
+      });
+    }
       setTracking(false);
       setDriveStopped(true);
       showToast("Drive stopped", "info");
@@ -453,8 +438,7 @@ const HomeScreen: React.FC = () => {
     }, [currentSessionId, showToast, currentDriveTrack, postToMap]);
 
 
-
-  /** ----------------🛰️ PLOT DRIVE (show ALL sessions in grey)------------------ */
+  /** ----------------🛰️ PLOT DRIVE ------------------ */
     const handlePlot = useCallback(async () => {
     try {
       const token = await AsyncStorage.getItem("accessToken");
@@ -482,14 +466,11 @@ const HomeScreen: React.FC = () => {
               .filter(([lng, lat]: [number, number]) => !isNaN(lng) && !isNaN(lat))
           : []
       );
-
-      // --------------SEND TO MAP------------
       postToMap({
         type: "displayTodayTrack",
         payload: todayTracks,
       });
-
-      showToast("Today's drive displayed", "success");
+      showToast("Drive Plotted Successfully", "success");
 
       setPlotModalVisible(false);
       setDriveStopped(false);
@@ -501,7 +482,7 @@ const HomeScreen: React.FC = () => {
 
     } catch (err) {
       console.log("Plot error:", err);
-      showToast("Failed to plot today's drive", "error");
+      showToast("Failed to plot drive", "error");
     }
   }, [postToMap, showToast]);
 
