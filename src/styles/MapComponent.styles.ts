@@ -94,6 +94,23 @@ export default StyleSheet.create({
     height: 24,
     resizeMode: "contain",
   },
+  /* ------------------- REFRESH BUTTON ------------------- */
+  refreshWrapper: {
+    position: "absolute",
+    bottom:100,
+    right: 10,
+    zIndex: 999,
+  },
+
+  refreshButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(255,255,255,0.9)",
+    borderWidth: 1.5,
+    justifyContent: "center",
+    alignItems: "center",
+  },
 
   /* ------------------- ZOOM BUTTONS ------------------- */
   zoomContainer: {

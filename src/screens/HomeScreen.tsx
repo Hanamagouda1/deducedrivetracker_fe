@@ -232,8 +232,7 @@ const HomeScreen: React.FC = () => {
         payload: { history: historyTracks, today: todayTracks },
       });
 
-      } catch (err) {
-        console.warn("All sessions fetch error:", err);
+      } catch  {
         showToast("Unable to load all sessions", "error");
       }
     }, [postToMap, showToast]);
@@ -559,10 +558,6 @@ const HomeScreen: React.FC = () => {
             showToast("Please plot the drive first", "error");
             return;
           }
-          if (!isPlotted) {
-            showToast("Please plot the drive first", "error");
-            return;
-          }
           setLogoutModalVisible(true);
         }}
         >
@@ -608,7 +603,12 @@ const HomeScreen: React.FC = () => {
             }}
           >
             <Text style={{ color: theme.text }}>Dark Mode</Text>
-            <Switch value={isDarkMode} onValueChange={setIsDarkMode} />
+            <Switch
+            value={isDarkMode}
+            onValueChange={setIsDarkMode}
+            thumbColor={isDarkMode ? "#ffffff" : "#007AFF"}        
+            trackColor={{ false: "#D1D1D6", true: "#4cd964" }}     
+            />
           </View>
 
           <View style={{height: 1,backgroundColor: "#ccc",marginVertical: 8,}}/>
@@ -632,6 +632,7 @@ const HomeScreen: React.FC = () => {
           refForward={webRef}
           onMapReady={onMapReady}
           onMessage={onWebMessage}
+          onRefresh={loadAllSessionsOnMap}
         />
       </View>
 

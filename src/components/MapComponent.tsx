@@ -44,6 +44,7 @@ type Props = {
   onMapReady: () => void;
   refForward?: React.RefObject<any>;
   onMessage?: (data: any) => void;
+  onRefresh?: () => void;
 };
 
 const getBorderColor = (key: MapStyleKey) => {
@@ -124,7 +125,7 @@ const smoothPathChaikin = (pts: Coord[], iterations = 2): Coord[] => {
   return result;
 };
 
-const MapComponent: React.FC<Props> = ({ onMapReady, refForward, onMessage }) => {
+const MapComponent: React.FC<Props> = ({ onMapReady, refForward, onMessage, onRefresh }) => {
   const cameraRef = useRef<any>(null);
   const firstFixDone = useRef(false); 
   const [styleKey, setStyleKey] = useState<MapStyleKey>("osm");
@@ -141,16 +142,11 @@ const MapComponent: React.FC<Props> = ({ onMapReady, refForward, onMessage }) =>
   const [_heading, setHeading] = useState<number | null>(null);
   const [viewMode, setViewMode] = useState<"live" | "history">("live");
   const [isFollowing, setIsFollowing] = useState(true);
-
   const [showMenu, setShowMenu] = useState(false);
   const slideAnim = useRef(new Animated.Value(0)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const retainScale = useRef(new Animated.Value(1)).current;
-
-  const rippleAnim = useRef(new Animated.Value(0)).current;
-  const pulse1 = useRef(new Animated.Value(0)).current;
-  const pulse2 = useRef(new Animated.Value(0)).current;
-
+  const refreshScale = useRef(new Animated.Value(1)).current;
   const [isMoving, setIsMoving] = useState(false);
   const lastCoordRef = useRef<Coord | null>(null);
   const CAMERA_ANIM = 600;
@@ -193,6 +189,21 @@ const MapComponent: React.FC<Props> = ({ onMapReady, refForward, onMessage }) =>
       }),
     ]).start();
   };
+
+// --------------REFRESH BUTTON--------------
+    const animateRefresh = (to: number) => {
+      Animated.timing(refreshScale, {
+        toValue: to,
+        duration: 100,
+        easing: Easing.out(Easing.ease),
+        useNativeDriver: true,
+      }).start();
+    };
+
+    const handleRefreshPress = () => {
+      if (onRefresh) onRefresh();   
+    };
+
 // --------------RETAIN BUTTON--------------
     const animateRetain = (to: number) => {
       Animated.timing(retainScale, {
@@ -220,13 +231,37 @@ const MapComponent: React.FC<Props> = ({ onMapReady, refForward, onMessage }) =>
   };
 
  // -----------------ZOOM BUTTONS-----------------
+  // const handleZoomIn = () => {
+  //   setZoom((prev) => prev + 1);
+  // };
+
+  // const handleZoomOut = () => {
+  //   setZoom((prev) => prev - 1);
+  // };
   const handleZoomIn = () => {
-    setZoom((prev) => prev + 1);
+    setZoom((prev) => {
+      const newZoom = Math.min(prev + 1, 24);
+      cameraRef.current?.setCamera({
+        zoomLevel: newZoom,
+        animationDuration: 300,
+        animationMode: "easeTo",
+      });
+      return newZoom;
+    });
   };
 
   const handleZoomOut = () => {
-    setZoom((prev) => prev - 1);
+    setZoom((prev) => {
+      const newZoom = Math.max(prev - 1, 1);
+      cameraRef.current?.setCamera({
+        zoomLevel: newZoom,
+        animationDuration: 300,
+        animationMode: "easeTo",
+      });
+      return newZoom;
+    });
   };
+
 
 // -----------------smoothCurve--------------
   const smoothCurve = (pts: Coord[]) => {
@@ -331,6 +366,11 @@ const MapComponent: React.FC<Props> = ({ onMapReady, refForward, onMessage }) =>
     [highlightedPath]
   );
 
+const viewModeRef = useRef(viewMode);
+useEffect(() => {
+  viewModeRef.current = viewMode;
+}, [viewMode]);
+
 //-------------- START,LIVE,COORD ,STOP, TRACK FIT----------------
   const handleMsg = useCallback(
     (msg: any) => {
@@ -350,7 +390,7 @@ const MapComponent: React.FC<Props> = ({ onMapReady, refForward, onMessage }) =>
 
         cameraRef.current?.setCamera({
           centerCoordinate: pt,
-          zoomLevel: 17,
+          zoomLevel: 15,
           animationDuration: CAMERA_ANIM,
           animationMode: "easeTo",
         });
@@ -375,74 +415,60 @@ const MapComponent: React.FC<Props> = ({ onMapReady, refForward, onMessage }) =>
 
         cameraRef.current?.setCamera({
           centerCoordinate: pt,
-          zoomLevel: 17,
+          zoomLevel: 15,
           animationDuration: CAMERA_ANIM,
           animationMode: "easeTo",
         });
       }
 
       if (type === "displayTrackAndFit") {
-      const pts = Array.isArray(payload) ? payload : [];
-      if (pts.length < 2) return;
+        const pts = Array.isArray(payload) ? payload : [];
+        if (pts.length < 2) return;
 
-      setViewMode("history");
-      setIsFollowing(false);
-      setHighlightedPath(pts);
-      setStart(pts[0]);
-      setEnd(pts[pts.length - 1]);
+        setViewMode("history");
+        setIsFollowing(false);
+        setHighlightedPath(pts);
+        setStart(pts[0]);
+        setEnd(pts[pts.length - 1]);
 
-      setTimeout(() => {
-        try {
-          const lngs = pts.map(p => p[0]);
-          const lats = pts.map(p => p[1]);
-
-          const minLng = Math.min(...lngs);
-          const maxLng = Math.max(...lngs);
-          const minLat = Math.min(...lats);
-          const maxLat = Math.max(...lats);
-
+        setTimeout(() => {
+          if (viewModeRef.current !== "history") return;   
           cameraRef.current?.fitBounds(
-            [minLng, minLat],   
-            [maxLng, maxLat],   
-            80,                 
-            800                
+            pts[0],
+            pts[pts.length - 1],
+            80,
+            800
           );
+        }, 150);
+      }
 
-        } catch {
-         showToast("Tracks fit error", "error");
-        }
-      }, 120);
-    }
 
      if (type === "displayAllTracks") {
       const { history = [], today = [] } = payload || {};
 
-      setHistoryPaths(history);   
-      setTodayPaths(today);     
+      setHistoryPaths(history);
+      setTodayPaths(today);
+
+      if (viewMode !== "history") return;  
 
       const flat = [...history, ...today].flat();
 
       if (flat.length >= 2) {
-        cameraRef.current?.fitBounds(
-          flat[0],
-          flat[flat.length - 1],
-          120,
-          120
-        );
+        cameraRef.current?.fitBounds(flat[0], flat[flat.length - 1], 120, 120);
       }
     }
 
     if (type === "displayTodayTrack") {
-        const tracks = Array.isArray(payload) ? payload : [];
-        setTodayPaths(tracks);
+      const tracks = Array.isArray(payload) ? payload : [];
+      setTodayPaths(tracks);
 
-        const flat = tracks.flat();
-        if (flat.length >= 2) {
-          try {
-            cameraRef.current?.fitBounds(flat[0], flat[flat.length - 1], 100, 100);
-          } catch {}
-        }
+      if (viewMode !== "history") return;  
+
+      const flat = tracks.flat();
+      if (flat.length >= 2) {
+        cameraRef.current?.fitBounds(flat[0], flat[flat.length - 1], 100, 100);
       }
+    }
 
     if (type === "setHistoryMode") {
       setViewMode("history");
@@ -452,6 +478,7 @@ const MapComponent: React.FC<Props> = ({ onMapReady, refForward, onMessage }) =>
       setHighlightedPath([]);
       setStart(null);
       setEnd(null);
+      setCurrentCoord((prev) => prev || null);
     }
 
     onMessage?.(msg);
@@ -509,7 +536,10 @@ const MapComponent: React.FC<Props> = ({ onMapReady, refForward, onMessage }) =>
         setEnd((e) => (e ? [...e] : null));
       }}
       >
-      <MapLibreGL.Camera ref={cameraRef}/>
+      <MapLibreGL.Camera
+      ref={cameraRef}
+      />
+
 
       {/* START AND END Buttons */}
       {start && (
@@ -683,6 +713,26 @@ const MapComponent: React.FC<Props> = ({ onMapReady, refForward, onMessage }) =>
             </View>
           </View>
         )}
+
+      {/* REFRESH Button */}
+      <Animated.View
+        style={[styles.refreshWrapper, {transform: [{ scale: refreshScale }],},]}
+      >
+        <TouchableOpacity
+          activeOpacity={0.85}
+          onPressIn={() => animateRefresh(0.8)}
+          onPressOut={() => animateRefresh(1)}
+          onPress={handleRefreshPress}         
+          style={[styles.refreshButton, borderTheme]} 
+        >
+          <Image
+            source={{
+              uri: "https://img.icons8.com/ios-glyphs/30/000000/refresh.png",
+            }}
+            style={{ width: 22, height: 22, tintColor: "#000" }}
+          />
+        </TouchableOpacity>
+      </Animated.View>
 
       {/* RETAIN Buttons */}
       <Animated.View style={[styles.retainWrapper, { transform: [{ scale: retainScale }] }]}>
