@@ -65,104 +65,77 @@ const LoginScreen = () => {
 
 
 const handleLogin = async () => {
+    if (!employeeId || !password) {
+      setModalType("error");
+      setModalMessage("⚠️ All fields are required!");
+      setModalVisible(true);
+      return;
+    }
 
-  if (!employeeId || !password) {
-    setModalType("error");
-    setModalMessage("⚠️ All fields are required!");
-    setModalVisible(true);
-    return;
-  }
+    const empIdPattern = /^DT-\d{5}$/;
+    if (!empIdPattern.test(employeeId)) {
+      setModalType("error");
+      setModalMessage("⚠️ Employee ID must be in the format DT-XXXXX");
+      setModalVisible(true);
+      return;
+    }
 
-  const empIdPattern = /^DT-\d{5}$/;
-  if (!empIdPattern.test(employeeId)) {
-    setModalType("error");
-    setModalMessage("⚠️ Employee ID must be in the format DT-XXXXX");
-    setModalVisible(true);
-    return;
-  }
+    setLoading(true);
+    animatePress();
 
-  setLoading(true);
-  animatePress();
-
-  try {
     try {
-      await axios.post(
+      const res = await axios.post(
         "https://deduce-drive-tracker-be.onrender.com/auth/login",
         {
           employee_id: employeeId,
-          password: "dummy-password"
+          password,
         }
       );
-    } catch (err: any) {
-      const msg = err?.response?.data?.detail || err?.response?.data?.message || "";
 
-      if (msg.toLowerCase().includes("not found") ||
-          msg.toLowerCase().includes("not registered") ||
-          msg.toLowerCase().includes("employee not")) 
-      {
-        setModalType("error");
-        setModalMessage("❌ You are not yet registered. Please register first.");
-        setModalVisible(true);
-        setLoading(false);
-        return;
-      }
-    }
-
-    const res = await axios.post(
-      "https://deduce-drive-tracker-be.onrender.com/auth/login",
-      {
-        employee_id: employeeId,
-        password,
-      }
-    );
-
-    if (!res.data.access_token) {
-      setModalType("error");
-      setModalMessage("❌ Invalid credentials");
-      setModalVisible(true);
-      setLoading(false);
-      return;
-    }
-
-    // SAVE TOKEN
-    await AsyncStorage.setItem("accessToken", res.data.access_token);
-
-    // SAVE USER PROFILE
-    if (res.data.user) {
+      // Save token
+      await AsyncStorage.setItem("accessToken", res.data.access_token);
       await AsyncStorage.setItem("userInfo", JSON.stringify(res.data.user));
-    }
 
-    // SUCCESS
-    setModalType("success");
-    setModalMessage("✅ Login Successful!");
-    setModalVisible(true);
-
-    setTimeout(() => {
-      setModalVisible(false);
-      navigation.replace("Home");
-    }, 1500);
-
-  } catch (error: any) {
-    console.log("Login error:", error);
-
-    // Wrong password
-    if (error?.response?.status === 401) {
-      setModalType("error");
-      setModalMessage("❌ Invalid credentials");
+      setModalType("success");
+      setModalMessage("✅ Login Successful!");
       setModalVisible(true);
-      return;
+
+      setTimeout(() => {
+        setModalVisible(false);
+        navigation.replace("Home");
+      }, 1200);
+
+    } 
+    catch (error: any) {
+      console.log("Login Error:", error);
+
+      const status = error?.response?.status;
+      const message = error?.response?.data?.detail;
+
+      // 404 → Not registered
+      if (status === 404) {
+        setModalType("error");
+        setModalMessage("❌ You are not registered. Please register first.");
+      }
+
+      // 401 → Wrong password
+      else if (status === 401) {
+        setModalType("error");
+        setModalMessage("❌ Invalid Credentials");
+      }
+
+      // Other errors (network, server)
+      else {
+        setModalType("error");
+        setModalMessage("❌ Unable to connect to the server. Try again.");
+      }
+
+      setModalVisible(true);
     }
-
-    // Server down / no internet
-    setModalType("error");
-    setModalMessage("❌ Unable to connect to the server. Try again.");
-    setModalVisible(true);
-
-  } finally {
-    setLoading(false);
-  }
-};
-
+    finally {
+      setLoading(false);
+    }
+  };
 
 
   return (
@@ -178,16 +151,20 @@ const handleLogin = async () => {
       >
         <GlassCard style={styles.card}>
           {/* Logo + Title */}
-          <View style={styles.logoContainer}>
+          <View style={{ width: "100%", alignItems: "center" }}>
+          <View style={styles.titleContainer}>
             <Image
               source={require('../assets/CompanyLogo.png')}
               style={styles.logo}
               resizeMode="contain"
             />
-            <Text style={styles.title}>Deduce Drive Tracker</Text>
+             <View style={styles.title}>
+              <Text style={styles.titleBold}>DEDUCE</Text>
+              <Text style={styles.titleSmall}>Drive Tracker</Text>
+            </View>
+            </View>
+            <Text style={styles.subtitle}>Employee Login</Text>
           </View>
-
-          <Text style={styles.subtitle}>Employee Login</Text>
 
           {/* Employee ID Input */}
           <TextInput
@@ -211,7 +188,7 @@ const handleLogin = async () => {
             style={[
               styles.input,
               focusedInput === "password" && styles.inputFocused,
-              { paddingRight: 45 }, // space for eye icon
+              { paddingRight: 45 }, 
             ]}
             placeholder="Password"
             placeholderTextColor="rgba(255,255,255,0.7)"
@@ -263,14 +240,14 @@ const handleLogin = async () => {
           <View style={styles.bottomLinks}>
             <TouchableOpacity
               activeOpacity={0.7}
-              onPress={() => navigation.navigate('ForgotPassword')}
+              onPress={() => navigation.replace('ForgotPassword')}
             >
               <Text style={styles.linkText}>Forgot Password?</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
               activeOpacity={0.7}
-              onPress={() => navigation.navigate('Register')}
+              onPress={() => navigation.replace('Register')}
             >
               <Text style={styles.linkText}>New User? Register</Text>
             </TouchableOpacity>
@@ -334,45 +311,58 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 15,
   },
+
   scrollContent: {
     flexGrow: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 20,
+    paddingVertical: 30,
   },
+
   card: {
     width: width * 0.9,
     alignItems: 'center',
+    justifyContent: 'center',  
     paddingVertical: 25,
+    minHeight: 350,             
+  }, 
+
+  titleContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",  
+    paddingHorizontal: 10,
   },
-  logoContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    alignSelf: 'center',
-    width: '100%',
-  },
+
   logo: {
     width: 60,
     height: 60,
-    alignItems: 'center',
-    justifyContent: 'center',
-    alignSelf: 'center',
-    marginRight: 5,
+    marginRight: 10,           
   },
+
   title: {
-    fontSize: 26,
-    fontWeight: 'bold',
-    color: '#fff',
-    flexShrink: 1,
-    flexWrap: 'wrap',
-    maxWidth: '60%',
-    textShadowColor: 'rgba(0,0,0,0.15)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
-    textAlign: 'center',
-    marginLeft: 0, 
+    flexDirection: "column",
+    justifyContent: "center",
+    alignItems: "center",       
+    maxWidth: width * 0.55,
   },
+
+  titleBold: {
+    fontSize: 30,
+    fontWeight: "900",
+    color: "#fff",
+    textAlign: "center",        
+  },
+
+  titleSmall: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#fff",
+    textAlign: "center",        
+    marginTop: -4,
+    opacity: 0.9,
+  },
+
   subtitle: {
     fontSize: 22,
     fontWeight: 'bold',
@@ -384,6 +374,7 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 1,
   },
+
   input: {
     width: width * 0.75,
     height: 50,
@@ -394,6 +385,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: 'black',
   },
+
   inputFocused: {
     backgroundColor: 'rgba(255,255,255,0.35)',
     borderColor: '#4688b4ff',
@@ -404,6 +396,7 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 3,
   },
+
   button: {
     width: width * 0.75,
     height: 50,
@@ -418,6 +411,7 @@ const styles = StyleSheet.create({
     shadowRadius: 3,
     elevation: 3,
   },
+
   buttonText: {
     color: '#fff',
     fontSize: 18,
@@ -426,23 +420,27 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 1,
   },
+
   bottomLinks: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     width: width * 0.75,
   },
+
   linkText: {
     color: 'black',
     fontSize: 14,
     textDecorationLine: 'underline',
     opacity: 1,
   },
+
   modalContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: 'rgba(0,0,0,0.4)',
   },
+
   modalContent: {
     width: '80%',
     padding: 25,
@@ -450,12 +448,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1.5,
   },
+
   modalText: {
     fontSize: 18,
     fontWeight: '600',
     textAlign: 'center',
     marginBottom: 15,
   },
+
   modalButton: {
     width: '50%',
     padding: 10,
@@ -464,6 +464,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+
   modalButtonText: {
     color: '#fff',
     fontWeight: 'bold',

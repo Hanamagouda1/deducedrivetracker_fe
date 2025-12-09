@@ -25,7 +25,7 @@ const App = () => {
         initialRouteName="Splash"
         screenOptions={{
           headerShown: false,
-          animation: 'fade', // Smooth transition after splash
+          animation: "slide_from_right",  
         }}
       >
         <Stack.Screen name="Splash" component={SplashScreen} />

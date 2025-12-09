@@ -23,6 +23,8 @@ import { CommonActions, useNavigation } from "@react-navigation/native";
 import Geolocation from "@react-native-community/geolocation";
 import axios from "axios";
 import styles from "../styles/HomeScreen.styles";
+import TextTicker from "react-native-text-ticker";
+import { Dimensions } from "react-native";
 
 const API_BASE = "https://deduce-drive-tracker-be.onrender.com";
 
@@ -49,6 +51,7 @@ const HomeScreen: React.FC = () => {
   const webRef = useRef<any>(null);
   const [currentSessionId, setCurrentSessionId] = useState<number | null>(null);
   const sessionRef = useRef<number | null>(null);
+  const { width } = Dimensions.get('window');
 
 
 /** -----------LOCATION PERMISSION--------------- */
@@ -522,7 +525,8 @@ const HomeScreen: React.FC = () => {
           { backgroundColor: theme.header, borderBottomColor: theme.border },
         ]}
       >
-        <TouchableOpacity onPress={toggleMenu}>
+        {/* LEFT BUTTON */}
+        <TouchableOpacity onPress={toggleMenu} style={styles.leftButton}>
           <Image
             source={{
               uri: menuVisible
@@ -533,43 +537,59 @@ const HomeScreen: React.FC = () => {
           />
         </TouchableOpacity>
 
-        <View style={styles.logoUserContainer}>
-          <Image
-            source={require("../assets/CompanyLogo.png")}
-            style={styles.logo}
-          />
-          <View style={styles.userInfo}>
-            <Text style={[styles.userName, { color: theme.icon }]}>
-              {userInfo?.employee_name || "User"}
-            </Text>
-            <Text style={[styles.userId, { color: theme.icon }]}>
-              {userInfo?.employee_id || "--"}
-            </Text>
+        {/* CENTER BLOCK (PERFECTLY CENTERED) */}
+        <View style={styles.centerContainer}>
+          <View style={styles.logoUserContainer}>
+            <Image
+              source={require("../assets/CompanyLogo.png")}
+              style={styles.logo}
+            />
+
+            <View style={styles.userInfo}>
+              <View style={{ maxWidth: width * 0.45, overflow: "hidden" }}>
+                <TextTicker
+                  style={[styles.userName, { color: theme.icon }]}
+                  duration={8000}
+                  loop
+                  bounce={false}
+                  repeatSpacer={20}
+                  marqueeDelay={500}
+                >
+                  {userInfo?.employee_name || "User"}
+                </TextTicker>
+              </View>
+
+              <Text style={[styles.userId, { color: theme.icon }]}>
+                {userInfo?.employee_id || "--"}
+              </Text>
+            </View>
           </View>
         </View>
 
+        {/* RIGHT BUTTON */}
         <TouchableOpacity
           onPress={() => {
-          if (tracking) {
-            showToast("Please stop the drive first", "error");
-            return;
-          }
-          if (driveStopped && !isPlotted) {
-            showToast("Please plot the drive first", "error");
-            return;
-          }
-          setLogoutModalVisible(true);
-        }}
-        >
-        <Image
-          source={{
-            uri: "https://img.icons8.com/ios-filled/50/ffffff/logout-rounded.png",
+            if (tracking) {
+              showToast("Please stop the drive first", "error");
+              return;
+            }
+            if (driveStopped && !isPlotted) {
+              showToast("Please plot the drive first", "error");
+              return;
+            }
+            setLogoutModalVisible(true);
           }}
-          style={[styles.icon, { tintColor: theme.icon }]}
-        />
-      </TouchableOpacity>
-
+          style={styles.rightButton}
+        >
+          <Image
+            source={{
+              uri: "https://img.icons8.com/ios-filled/50/ffffff/logout-rounded.png",
+            }}
+            style={[styles.icon, { tintColor: theme.icon }]}
+          />
+        </TouchableOpacity>
       </View>
+
 
       {/* MENU */}
       {menuVisible && (

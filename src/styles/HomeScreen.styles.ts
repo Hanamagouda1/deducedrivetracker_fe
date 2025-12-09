@@ -22,9 +22,28 @@ const styles = StyleSheet.create({
     borderBottomWidth: 0.7,
   },
 
-  icon: {
-    width: 28,
-    height: 28,
+ icon: {
+  width: 28,
+  height: 28,
+  },
+
+  leftButton: {
+    width: 40,
+    justifyContent: "center",
+    alignItems: "flex-start",
+  },
+
+  rightButton: {
+    width: 40,
+    justifyContent: "center",
+    alignItems: "flex-end",
+  },
+
+  centerContainer: {
+    flex: 1,                   
+    justifyContent: "center",
+    alignItems: "center",       
+    flexDirection: "row",
   },
 
   logoUserContainer: {
@@ -36,16 +55,20 @@ const styles = StyleSheet.create({
     width: 42,
     height: 42,
     resizeMode: "contain",
-    marginRight: 10,
+    marginRight: 5,
   },
 
-  userInfo: {
-    justifyContent: "center",
+ userInfo: {
+    marginLeft: 10,
+    flexShrink: 1,
+    maxWidth: "60%",    
   },
 
   userName: {
     fontSize: 16,
     fontWeight: "bold",
+    width: "100%",        
+    overflow: "hidden",  
   },
 
   userId: {

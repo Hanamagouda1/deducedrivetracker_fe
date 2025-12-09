@@ -33,7 +33,6 @@ type RegistrationScreenNavigationProp = NativeStackNavigationProp<
 const RegisterScreen = () => {
   const navigation = useNavigation<RegistrationScreenNavigationProp>();
   const [employeeId, setEmployeeId] = useState('');
-  const [employeename, setEmployeename] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -66,65 +65,69 @@ const RegisterScreen = () => {
   };
 
   const handleRegister = async () => {
-    const empIdPattern = /^DT-\d{5}$/;
-    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/; 
+  const empIdPattern = /^DT-\d{5}$/;
+  const emailPattern = /^[a-zA-Z0-9._%+-]+@deducetech\.(in|com)$/;
+  
+  if (!employeeId || !email || !password) {
+    setModalType("error");
+    setModalMessage("⚠️ All fields are required!");
+    setModalVisible(true);
+    return;
+  }
 
-    // 🔹 Validate all required fields
-    if (!employeeId || !employeename || !email || !password) {
-      setModalType('error');
-      setModalMessage('⚠️ All fields are required!');
+  if (!empIdPattern.test(employeeId)) {
+    setModalType('error');
+    setModalMessage('⚠️ Employee ID must be in the format DT-XXXXX');
+    setModalVisible(true);
+    return;
+  }
+
+  if (!emailPattern.test(email)) {
+    setModalType('error');
+    setModalMessage('⚠️ Email must end with @deducetech.in or @deducetech.com');
+    setModalVisible(true);
+    return;
+  }
+
+  if (password.length < 4) {
+    setModalType("error");
+    setModalMessage("⚠️ Password must be at least 4 characters long");
+    setModalVisible(true);
+    return;
+  }
+
+  setLoading(true);
+  animatePress();
+
+  try {
+      await axios.post(
+        'https://deduce-drive-tracker-be.onrender.com/auth/register',
+        {
+          employee_id: employeeId,
+          email,
+          password,
+        }
+      );
+
+      setModalType('success');
+      setModalMessage('✅ Registration Successful!');
       setModalVisible(true);
-      return;
-    }
 
-    // 🔹 Validate employee ID format
-    if (!empIdPattern.test(employeeId)) {
+      setTimeout(() => {
+        setModalVisible(false);
+        navigation.replace('Login');
+      }, 1500);
+    } catch (err: any) {
+      const backendMsg =
+        err.response?.data?.detail ||
+        '❌ Something went wrong. Please try again.';
+
       setModalType('error');
-      setModalMessage('⚠️ Employee ID must be in the format DT-XXXXX');
+      setModalMessage(backendMsg);
       setModalVisible(true);
-      return;
-    }
-
-    // 🔹 Validate DeduceTech email format
-    if (!emailPattern.test(email)) {
-      setModalType('error');
-      setModalMessage('⚠️ Email must end with @deducetech.in or @deducetech.com');
-      setModalVisible(true);
-      return;
-    }
-
-    setLoading(true);
-    animatePress();
-
-    try {
-      const res = await axios.post('https://deduce-drive-tracker-be.onrender.com/auth/register', {
-        employee_id: employeeId,
-        employee_name: employeename,
-        email,
-        password,
-      });
-
-      if (res.status === 200) {
-        setModalType('success');
-        setModalMessage('✅ Registration Successful!');
-        setModalVisible(true);
-        setTimeout(() => {
-          setModalVisible(false);
-          navigation.replace('Login');
-        }, 1500);
-      } else {
-        setModalType('error');
-        setModalMessage('❌ Registration Failed. Try again!');
-        setModalVisible(true);
-      }
-    } catch {
-      setModalType('error');
-      setModalMessage('❌ Something went wrong. Please try again.');
-      setModalVisible(true);
-    } finally {
-      setLoading(false);
     }
   };
+
 
   return (
     <KeyboardAvoidingView
@@ -137,16 +140,21 @@ const RegisterScreen = () => {
         keyboardShouldPersistTaps="handled"
       >
         <GlassCard style={styles.card}>
-          <View style={styles.logoContainer}>
+           {/* Logo + Title */}
+          <View style={{ width: "100%", alignItems: "center" }}>
+          <View style={styles.titleContainer}>
             <Image
               source={require('../assets/CompanyLogo.png')}
               style={styles.logo}
               resizeMode="contain"
             />
-            <Text style={styles.title}>Deduce Drive Tracker</Text>
+              <View style={styles.title}>
+              <Text style={styles.titleBold}>DEDUCE</Text>
+              <Text style={styles.titleSmall}>Drive Tracker</Text>
+            </View>
+            </View>
+            <Text style={styles.subtitle}>Create Account</Text>
           </View>
-
-          <Text style={styles.subtitle}>Create Account</Text>
 
           {/* Employee ID */}
           <TextInput
@@ -164,28 +172,11 @@ const RegisterScreen = () => {
             onBlur={() => setFocusedInput(null)}
           />
 
-          {/* Employee Name */}
-          <TextInput
-            style={[
-              styles.input,
-              focusedInput === 'employeeName' && styles.inputFocused,
-            ]}
-            placeholder="Employee Name"
-            placeholderTextColor="rgba(255,255,255,0.7)"
-            value={employeename}
-            onChangeText={setEmployeename}
-            onFocus={() => setFocusedInput('employeeName')}
-            onBlur={() => setFocusedInput(null)}
-          />
-
           {/* Email */}
           <TextInput
-            style={[
-              styles.input,
-              focusedInput === 'email' && styles.inputFocused,
-            ]}
-            placeholder="Email (name@deducetech.in/.com)"
-            placeholderTextColor="rgba(255,255,255,0.7)"
+            style={[styles.input,focusedInput === 'email' && styles.inputFocused,]}
+            placeholder="Email(_@deducetech.in/.com)"
+            placeholderTextColor="#ffffffb3"
             value={email}
             onChangeText={setEmail}
             keyboardType="email-address"
@@ -296,7 +287,10 @@ const RegisterScreen = () => {
                       modalType === 'error' ? '#ff4d4d' : '#28a745',
                   },
                 ]}
-                onPress={() => setModalVisible(false)}
+                onPress={() => {
+                  setModalVisible(false);
+                  setLoading(false);  
+                }}
               >
                 <Text style={styles.modalButtonText}>Try Again</Text>
               </TouchableOpacity>
@@ -316,46 +310,70 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 15,
   },
+
   scrollContent: {
     flexGrow: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 20,
+    paddingVertical: 30,
   },
+
   card: {
     width: width * 0.9,
     alignItems: 'center',
+    justifyContent: 'center',  
     paddingVertical: 25,
+    minHeight: 350,             
+  }, 
+
+  titleContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",  
+    paddingHorizontal: 10,
   },
-  logoContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    alignSelf: 'center',
-    width: '100%',
-  },
+
   logo: {
     width: 60,
     height: 60,
-    marginRight: 5,
+    marginRight: 10,           
   },
+
   title: {
-    fontSize: 26,
-    fontWeight: 'bold',
-    color: '#fff',
-    flexShrink: 1,
-    flexWrap: 'wrap',
-    maxWidth: '60%',
-    textAlign: 'center',
-    marginLeft: 0,
+    flexDirection: "column",
+    justifyContent: "center",
+    alignItems: "center",       
+    maxWidth: width * 0.55,
   },
+
+  titleBold: {
+    fontSize: 30,
+    fontWeight: "900",
+    color: "#fff",
+    textAlign: "center",        
+  },
+
+  titleSmall: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#fff",
+    textAlign: "center",        
+    marginTop: -4,
+    opacity: 0.9,
+  },
+
   subtitle: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: 'bold',
     color: '#fff',
     marginVertical: 10,
+    textAlign: 'center',
     opacity: 0.9,
+    textShadowColor: 'rgba(0,0,0,0.1)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 1,
   },
+
   input: {
     width: width * 0.75,
     height: 50,
@@ -366,6 +384,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#000',
   },
+
   inputFocused: {
     backgroundColor: 'rgba(255,255,255,0.35)',
     borderColor: '#4688b4ff',
@@ -376,6 +395,7 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 3,
   },
+
   button: {
     width: width * 0.75,
     height: 50,
@@ -390,43 +410,51 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 4,
   },
+
   buttonText: {
     color: '#fff',
     fontSize: 18,
     fontWeight: 'bold',
   },
+
   bottomLinks: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     width: width * 0.75,
   },
+
   linkLabel: {
     color: '#000',
     fontSize: 14,
   },
+
   linkText: {
     color: 'black',
     fontSize: 14,
     textDecorationLine: 'underline',
   },
+
   modalContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: 'rgba(0,0,0,0.4)',
   },
+
   modalContent: {
     width: '80%',
     padding: 25,
     borderRadius: 20,
     alignItems: 'center',
   },
+
   modalText: {
     fontSize: 18,
     fontWeight: '600',
     textAlign: 'center',
     marginBottom: 15,
   },
+
   modalButton: {
     width: '50%',
     padding: 10,
@@ -435,6 +463,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+
   modalButtonText: {
     color: '#fff',
     fontWeight: 'bold',
