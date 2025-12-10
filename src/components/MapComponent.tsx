@@ -60,7 +60,7 @@ const getBorderColor = (key: MapStyleKey) => {
   }
 };
 
-// ---------------helpers
+// ---------------helpers------------------
 const EARTH_RADIUS = 6371000;
 const createCircle = (center: Coord, radiusMeters: number, steps = 60): Coord[] => {
   const [lng, lat] = center;
@@ -231,13 +231,6 @@ const MapComponent: React.FC<Props> = ({ onMapReady, refForward, onMessage, onRe
   };
 
  // -----------------ZOOM BUTTONS-----------------
-  // const handleZoomIn = () => {
-  //   setZoom((prev) => prev + 1);
-  // };
-
-  // const handleZoomOut = () => {
-  //   setZoom((prev) => prev - 1);
-  // };
   const handleZoomIn = () => {
     setZoom((prev) => {
       const newZoom = Math.min(prev + 1, 24);
@@ -263,20 +256,7 @@ const MapComponent: React.FC<Props> = ({ onMapReady, refForward, onMessage, onRe
   };
 
 
-// -----------------smoothCurve--------------
-  const smoothCurve = (pts: Coord[]) => {
-    if (!pts || pts.length < 3) return pts;
-    return smoothPathChaikin(smoothPathChaikin(pts, 1), 1); 
-  };
-
-// --------------Smoothed live path for rendering -------------
-  const smoothLivePath = React.useMemo(
-    () => (livePath.length < 3 ? livePath : smoothPathChaikin(livePath, 2)),
-    [livePath]
-  );
-
-
-// -----------------circleFeature-------------
+// -----------------CircleFeature-------------
   const circleFeature: any = currentCoord
     ? {
         type: "Feature",
@@ -284,6 +264,37 @@ const MapComponent: React.FC<Props> = ({ onMapReady, refForward, onMessage, onRe
         geometry: { type: "Polygon", coordinates: [createCircle(currentCoord, 100)] },
       }
     : null;
+
+ // -----------------PointerFeature-------------   
+  const [dotOpacity, setDotOpacity] = useState(1);
+  const [dotSize, setDotSize] = useState(8);
+
+  useEffect(() => {
+    let grow = false;
+
+    const interval = setInterval(() => {
+      setDotSize(prev => {
+        if (grow) {
+          if (prev >= 8) { grow = false; return 8; }
+          return prev + 0.2;  
+        } else {
+          if (prev <= 6) { grow = true; return 6; }
+          return prev - 0.2;  
+        }
+      });
+
+      setDotOpacity(prev => {
+        if (grow) {
+          return Math.min(prev + 0.03, 1);
+        } else {
+          return Math.max(prev - 0.03, 0.5);
+        }
+      });
+
+    }, 50); 
+
+    return () => clearInterval(interval);
+  }, []);
 
 // -------------📌 GPS Tracking ----------------
   useEffect(() => {
@@ -348,17 +359,18 @@ const MapComponent: React.FC<Props> = ({ onMapReady, refForward, onMessage, onRe
     };
   }, [currentCoord, zoom, isMoving]);
 
-  // -----------------Smooth zoom updates -----------------
-  // useEffect(() => {
-  //   if (!cameraRef.current) return;
-    
-  //   cameraRef.current.setCamera({
-  //     zoomLevel: zoom,
-  //     animationDuration: CAMERA_ANIM,
-  //     animationMode: "easeTo",
-  //   });
-  // }, [zoom]);
 
+// -----------------smoothCurve--------------
+  const smoothCurve = (pts: Coord[]) => {
+    if (!pts || pts.length < 3) return pts;
+    return smoothPathChaikin(smoothPathChaikin(pts, 1), 1); 
+  };
+
+// --------------Smoothed live path for rendering -------------
+  const smoothLivePath = React.useMemo(
+    () => (livePath.length < 3 ? livePath : smoothPathChaikin(livePath, 2)),
+    [livePath]
+  );
 
 // -----------------smoothed highlighted session path--------------
   const smoothHighlightedPath = React.useMemo(
@@ -366,12 +378,12 @@ const MapComponent: React.FC<Props> = ({ onMapReady, refForward, onMessage, onRe
     [highlightedPath]
   );
 
-const viewModeRef = useRef(viewMode);
-useEffect(() => {
-  viewModeRef.current = viewMode;
-}, [viewMode]);
-
 //-------------- START,LIVE,COORD ,STOP, TRACK FIT----------------
+ const viewModeRef = useRef(viewMode);
+  useEffect(() => {
+    viewModeRef.current = viewMode;
+  }, [viewMode]);
+
   const handleMsg = useCallback(
     (msg: any) => {
       const { type, payload } = msg || {};
@@ -409,8 +421,10 @@ useEffect(() => {
         const { lat, lng } = payload;
         const pt: Coord = [lng, lat];
 
-        setEnd(pt);                 
-        setIsFollowing(false); 
+        setEnd(pt);
+        setTodayPaths(prev => [...prev, livePath]);  
+        setLivePath([]);        
+        setIsFollowing(false);
         setViewMode("history");
 
         cameraRef.current?.setCamera({
@@ -420,6 +434,7 @@ useEffect(() => {
           animationMode: "easeTo",
         });
       }
+
 
       if (type === "displayTrackAndFit") {
         const pts = Array.isArray(payload) ? payload : [];
@@ -441,7 +456,6 @@ useEffect(() => {
           );
         }, 150);
       }
-
 
      if (type === "displayAllTracks") {
       const { history = [], today = [] } = payload || {};
@@ -571,7 +585,7 @@ useEffect(() => {
                 id={`hist-layer-${index}`}
                 style={{
                   lineColor: "#00C853", 
-                  lineWidth: 5,
+                  lineWidth: 2,
                   lineJoin: "round",
                   lineCap: "round",
                   lineSortKey: 1
@@ -581,36 +595,36 @@ useEffect(() => {
           );
         })}
 
-        {todayPaths.map((trk, index) => {
+      {livePath.length === 0 && todayPaths.map((trk, index) => {
         if (!Array.isArray(trk) || trk.length < 2) return null;
-        const feature = {
-          type: "Feature" as const,
-          properties: {},
-          geometry: {
-            type: "LineString" as const,
-            coordinates: smoothCurve(trk),
-          },
-        };
+          const feature = {
+            type: "Feature" as const,
+            properties: {},
+            geometry: {
+              type: "LineString" as const,
+              coordinates: smoothCurve(trk),
+            },
+          };
 
-        return (
-          <MapLibreGL.ShapeSource
-            key={`today-${index}`}
-            id={`today-${index}`}
-            shape={feature}
-          >
-            <MapLibreGL.LineLayer
-              id={`today-layer-${index}`}
-              style={{
-                lineColor: "#8e24aa", 
-                lineWidth: 4,
-                lineJoin: "round",
-                lineCap: "round",
-                lineSortKey: 2
-              }}
-            />
-          </MapLibreGL.ShapeSource>
-        );
-      })}
+          return (
+            <MapLibreGL.ShapeSource
+              key={`today-${index}`}
+              id={`today-${index}`}
+              shape={feature}
+            >
+              <MapLibreGL.LineLayer
+                id={`today-layer-${index}`}
+                style={{
+                  lineColor: "#8e24aa",
+                  lineWidth: 2,
+                  lineJoin: "round",
+                  lineCap: "round",
+                  lineSortKey: 2,
+                }}
+              />
+            </MapLibreGL.ShapeSource>
+          );
+        })}
 
       {smoothHighlightedPath.length > 1 && (
         <MapLibreGL.ShapeSource id="highlight-track" shape={{
@@ -623,7 +637,7 @@ useEffect(() => {
             id="highlight-track-line"
             style={{
               lineColor: "#0051FF", 
-              lineWidth: 6,
+              lineWidth: 4,
               lineJoin: "round",
               lineCap: "round",
               lineSortKey: 3
@@ -642,7 +656,7 @@ useEffect(() => {
             id="live-track-line"
             style={{
               lineColor: "#33BBFF", 
-              lineWidth: 3,
+              lineWidth: 2,
               lineJoin: "round",
               lineCap: "round",
               lineSortKey: 4
@@ -666,28 +680,37 @@ useEffect(() => {
 
       {currentCoord !== null && Array.isArray(currentCoord) && (
         <MapLibreGL.ShapeSource
-          id="gps-dot-src"
-          shape={{
-            type: "Feature",
-            properties: {},
-            geometry: {
-              type: "Point",
-              coordinates: currentCoord,
-            },
-          }}
-        >
-          <MapLibreGL.CircleLayer
-            id="gps-dot"
-            style={{
-              circleRadius: 8,          
-              circleColor: "#4285F4",      
-              circleStrokeWidth: 2,        
-              circleStrokeColor: "#FFFFFF",
-              circleOpacity: 1,
-              circleSortKey: 9999
+            id="gps-dot-src"
+            shape={{
+              type: "Feature",
+              properties: {},
+              geometry: {
+                type: "Point",
+                coordinates: currentCoord,
+              },
             }}
-          />
-        </MapLibreGL.ShapeSource>
+          >
+            <MapLibreGL.CircleLayer
+              id="gps-dot-fill"
+              style={{
+                circleRadius: dotSize,          
+                circleColor: "#4285F4",
+                circleOpacity: dotOpacity,     
+              }}
+            />
+
+            <MapLibreGL.CircleLayer
+              id="gps-dot-border"
+              style={{
+                circleRadius: dotSize + 1,       
+                circleColor: "transparent",
+                circleStrokeWidth: 1,
+                circleStrokeColor: "#FFFFFF",
+                circleOpacity: 1,
+                circleSortKey: 9999,
+              }}
+            />
+          </MapLibreGL.ShapeSource>
       )}
       </MapLibreGL.MapView>
 
